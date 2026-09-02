@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Shelf Replenishment</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Shelf Replenishment Planner</h1>
+
+      <section class="panel">
+        <h2>Inventory</h2>
+        <div id="inventory-list" class="inventory-list"></div>
+
+        <div class="button-row">
+          <button id="add-item-btn" type="button">Add Item</button>
+          <button id="calculate-btn" class="primary" type="button">Calculate Replenishment</button>
+        </div>
+      </section>
+
+      <section class="panel results-panel">
+        <h2>Replenishment Plan</h2>
+        <div id="results" class="results">No items checked yet.</div>
+      </section>
+    </main>
+
+    <template id="inventory-row-template">
+      <div class="inventory-row">
+        <input type="text" name="sku" placeholder="SKU" aria-label="SKU" />
+        <input type="number" name="on_hand" placeholder="On hand" min="0" value="0" />
+        <input type="number" name="safety_stock" placeholder="Safety stock" min="0" value="0" />
+        <input type="number" name="reorder_point" placeholder="Reorder point" min="0" value="0" />
+        <input type="number" name="reorder_quantity" placeholder="Reorder qty" min="1" value="1" />
+        <button type="button" class="remove-btn">Remove</button>
+      </div>
+    </template>
+
+    <script src="script.js"></script>
+  </body>
+</html>
