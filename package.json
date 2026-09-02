@@ -1,0 +1,19 @@
+{
+  "name": "shelf-replenishment",
+  "version": "1.0.0",
+  "description": "A small Python project for calculating replenishment recommendations from inventory data using only the Python standard library.",
+  "main": "script.js",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "xlsx": "^0.18.5"
+  }
+}

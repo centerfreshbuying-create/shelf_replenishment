@@ -27,6 +27,9 @@ const warehouseOrders = document.getElementById('warehouse-orders');
 const deliveryList = document.getElementById('delivery-list');
 const usersList = document.getElementById('users-list');
 const userForm = document.getElementById('user-form');
+const inventoryUploadInput = document.getElementById('inventory-upload');
+const importInventoryBtn = document.getElementById('import-inventory-btn');
+const importStatus = document.getElementById('import-status');
 
 const itemFields = {
   name: document.getElementById('item-name'),
@@ -264,6 +267,103 @@ function renderUsers() {
   `).join('');
 }
 
+function setImportStatus(message, isError = false) {
+  importStatus.textContent = message;
+  importStatus.classList.toggle('empty', !isError);
+  importStatus.style.color = isError ? '#b53d3d' : '#5d6980';
+}
+
+function normalizeInventoryRow(row) {
+  const textValue = (value) => typeof value === 'string' ? value.trim() : (value ?? '').toString().trim();
+
+  const sku = textValue(row.sku || row.SKU || row.item || row.name || row.Item || row['Item Name']);
+  const itemNumber = textValue(row.itemNumber || row['Item Number'] || row['Item #'] || row.number || row.Number || row.upc || '');
+  const upc = textValue(row.upc || row.UPC || row.barcode || row['Barcode'] || '');
+  const department = textValue(row.department || row.Department || row.category || row.Category || 'General');
+  const location = textValue(row.location || row.Location || row.aisle || row.Aisle || 'Main Floor');
+  const caseQuantity = Number(row.caseQuantity || row['Case Quantity'] || row.case_qty || row['Case Qty'] || 1);
+  const onHand = Number(row.on_hand || row['On Hand'] || row.onHand || row.quantity || row['Qty'] || 0);
+  const safetyStock = Number(row.safety_stock || row['Safety Stock'] || row.safety || row['Safety'] || 0);
+  const reorderPoint = Number(row.reorder_point || row['Reorder Point'] || row.reorder || row['Reorder'] || 0);
+  const reorderQuantity = Number(row.reorder_quantity || row['Reorder Quantity'] || row.reorderQty || row['Reorder Qty'] || 1);
+
+  if (!sku && !upc && !itemNumber) return null;
+
+  const normalizedSku = sku || `ITEM-${(upc || itemNumber || 'new').replace(/\s+/g, '-')}`;
+
+  return {
+    sku: normalizedSku,
+    upc: upc || `${normalizedSku}-upc`,
+    itemNumber: itemNumber || normalizedSku,
+    department,
+    location,
+    caseQuantity: Number.isFinite(caseQuantity) && caseQuantity > 0 ? caseQuantity : 1,
+    on_hand: Number.isFinite(onHand) ? onHand : 0,
+    safety_stock: Number.isFinite(safetyStock) ? safetyStock : 0,
+    reorder_point: Number.isFinite(reorderPoint) ? reorderPoint : 0,
+    reorder_quantity: Number.isFinite(reorderQuantity) && reorderQuantity > 0 ? reorderQuantity : 1,
+  };
+}
+
+function mergeInventory(existing, imported) {
+  const next = [...existing];
+  imported.forEach((item) => {
+    const matchIndex = next.findIndex((current) => current.sku === item.sku || current.upc === item.upc || current.itemNumber === item.itemNumber);
+    if (matchIndex >= 0) {
+      next[matchIndex] = { ...next[matchIndex], ...item };
+    } else {
+      next.push(item);
+    }
+  });
+  return next;
+}
+
+function importInventoryFromFile(file) {
+  if (!file) {
+    setImportStatus('Please select an Excel file first.', true);
+    return;
+  }
+
+  const extension = file.name.split('.').pop()?.toLowerCase();
+  if (!['xlsx', 'xls', 'csv'].includes(extension || '')) {
+    setImportStatus('Please upload a .xlsx, .xls, or .csv file.', true);
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const arrayBuffer = event.target.result;
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(firstSheet, { defval: '', raw: false });
+
+      const importedItems = rows
+        .map(normalizeInventoryRow)
+        .filter(Boolean);
+
+      if (!importedItems.length) {
+        setImportStatus('The uploaded sheet could not be read. Please check the headers and column names.', true);
+        return;
+      }
+
+      state.inventory = mergeInventory(state.inventory, importedItems);
+      state.notifications.unshift(`Inventory imported from ${file.name} (${importedItems.length} items)`);
+      state.notifications = state.notifications.slice(0, 8);
+      saveState();
+      renderDashboard();
+      renderRefillList();
+      setImportStatus(`Imported ${importedItems.length} items from ${file.name}.`);
+      inventoryUploadInput.value = '';
+    } catch (error) {
+      console.error('Unable to import inventory file', error);
+      setImportStatus('There was a problem reading the file. Please verify the Excel sheet format.', true);
+    }
+  };
+
+  reader.readAsArrayBuffer(file);
+}
+
 function renderNotifications() {
   notificationList.innerHTML = state.notifications.slice(0, 5).map((message) => `<div class="list-item">${message}</div>`).join('');
 }
@@ -393,6 +493,18 @@ userForm.addEventListener('submit', (event) => {
   userForm.reset();
   renderUsers();
   renderDashboard();
+});
+
+importInventoryBtn.addEventListener('click', () => {
+  const file = inventoryUploadInput.files[0];
+  importInventoryFromFile(file);
+});
+
+inventoryUploadInput.addEventListener('change', () => {
+  const file = inventoryUploadInput.files[0];
+  if (file) {
+    setImportStatus(`Selected file: ${file.name}`);
+  }
 });
 
 document.querySelectorAll('.tab').forEach((tab) => {

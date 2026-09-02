@@ -154,6 +154,21 @@
                 <input id="user-email" type="email" placeholder="Email" required />
                 <button type="submit" class="primary">Add user</button>
               </form>
+
+              <div class="subheader">
+                <h3>Inventory import</h3>
+              </div>
+              <div class="scan-form" style="margin-top: 12px;">
+                <label>
+                  Upload Excel file with all items
+                  <input id="inventory-upload" type="file" accept=".xlsx,.xls,.csv" />
+                </label>
+                <div class="button-row">
+                  <button id="import-inventory-btn" class="primary" type="button">Import inventory sheet</button>
+                </div>
+                <p id="import-status" class="empty" style="margin: 10px 0 0;">No inventory file uploaded yet.</p>
+              </div>
+
               <div id="users-list" class="list-box"></div>
             </div>
 
@@ -168,6 +183,7 @@
       </main>
     </div>
 
+    <script src="./node_modules/xlsx/dist/xlsx.full.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>
