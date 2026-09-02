@@ -19,7 +19,6 @@
           <button class="tab" data-tab="scan" type="button">Shelf Scan</button>
           <button class="tab" data-tab="orders" type="button">Orders</button>
           <button class="tab" data-tab="warehouse" type="button">Warehouse</button>
-          <button class="tab" data-tab="delivery" type="button">Delivery</button>
           <button class="tab" data-tab="admin" type="button">Admin</button>
         </nav>
       </header>
@@ -64,7 +63,7 @@
 
           <div class="quick-actions">
             <button class="quick-action" data-tab="scan" type="button"><span>SCAN</span> Scan an item</button>
-            <button class="quick-action" data-tab="delivery" type="button"><span>MOVE</span> Track a delivery</button>
+            <button class="quick-action" data-tab="orders" type="button"><span>ORDERS</span> View my orders</button>
             <button class="quick-action" data-tab="admin" type="button"><span>FILE</span> Import inventory</button>
           </div>
 
@@ -115,10 +114,11 @@
             <div class="scan-grid">
               <div class="scan-form">
                 <label>
-                  Shelf barcode
-                  <input id="scan-input" type="text" placeholder="Scan shelf label or UPC" />
+                  Item barcode
+                  <input id="scan-input" type="text" placeholder="Use camera or enter barcode" />
                 </label>
-                <button id="scan-btn" class="primary" type="button">Lookup item</button>
+                <button id="scan-btn" class="primary" type="button">Open camera to scan</button>
+                <button id="manual-lookup-btn" type="button">Look up typed barcode</button>
               </div>
 
               <div class="item-card" id="item-details">
@@ -132,30 +132,12 @@
               </div>
             </div>
 
-            <form id="refill-form" class="refill-form">
-              <label>
-                Cases or units needed
-                <input id="requested-qty" type="number" min="1" value="1" />
-              </label>
-              <label>
-                Store location
-                <input id="store-location" type="text" value="Downtown Store" />
-              </label>
-              <label>
-                Employee name
-                <input id="employee-name" type="text" value="Maria Gomez" />
-              </label>
-              <button class="primary" type="submit">Add to refill list</button>
-            </form>
-
             <div class="panel-header subheader">
               <h3>Refill list</h3>
             </div>
             <div id="refill-list" class="list-box"></div>
 
-            <div class="button-row">
-              <button id="create-order-btn" class="primary" type="button">Create Order</button>
-            </div>
+            <button id="create-order-btn" class="primary" type="button">Send complete order</button>
           </div>
         </section>
 
@@ -177,15 +159,6 @@
           </div>
         </section>
 
-        <section id="delivery" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Delivery tracking</h2>
-            </div>
-            <div id="delivery-list" class="order-list"></div>
-          </div>
-        </section>
-
         <section id="admin" class="tab-panel">
           <div class="panel-grid">
             <div class="panel-box">
@@ -193,10 +166,17 @@
                 <h2>User roles</h2>
               </div>
               <form id="user-form" class="user-form">
-                <input id="user-name" type="text" placeholder="Name" required />
-                <input id="user-role" type="text" placeholder="Role" required />
-                <input id="user-email" type="email" placeholder="Email" required />
-                <button type="submit" class="primary">Add user</button>
+                <input id="user-name" type="text" placeholder="Username" required />
+                <input id="user-password" type="password" placeholder="Password" required />
+                <select id="user-role" required>
+                  <option value="">Choose role</option>
+                  <option value="employee">Employee</option>
+                  <option value="manager">Manager</option>
+                  <option value="store">Store</option>
+                  <option value="warehouse">Warehouse</option>
+                  <option value="admin">Admin</option>
+                </select>
+                <button type="submit" class="primary">Add account</button>
               </form>
 
               <div class="subheader">
@@ -226,6 +206,24 @@
           </div>
         </section>
       </main>
+    </div>
+
+    <div id="camera-modal" class="modal" hidden>
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="camera-title">
+        <div class="modal-header"><div><p class="eyebrow">Barcode scanner</p><h2 id="camera-title">Point at an item barcode</h2></div><button id="close-camera-btn" type="button" aria-label="Close camera">Close</button></div>
+        <video id="camera-video" autoplay playsinline></video>
+        <p id="camera-status" class="empty">Starting camera...</p>
+        <button id="camera-capture-btn" class="primary" type="button">Scan barcode</button>
+      </div>
+    </div>
+
+    <div id="quantity-modal" class="modal" hidden>
+      <div class="modal-card quantity-card" role="dialog" aria-modal="true" aria-labelledby="quantity-title">
+        <p class="eyebrow">Item found</p><h2 id="quantity-title">How many cases?</h2>
+        <p id="quantity-item-name"></p>
+        <input id="quantity-input" type="number" min="1" value="1" inputmode="numeric" />
+        <div class="button-row"><button id="cancel-quantity-btn" type="button">Cancel</button><button id="confirm-quantity-btn" class="primary" type="button">Add item</button></div>
+      </div>
     </div>
 
     <script src="./vendor/xlsx.full.min.js"></script>

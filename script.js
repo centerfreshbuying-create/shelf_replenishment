@@ -8,25 +8,32 @@ const defaultInventory = [
 ];
 
 const defaultUsers = [
-  { name: 'Maria Gomez', role: 'Store Worker', email: 'maria@store.com' },
-  { name: 'Jamal Lee', role: 'Warehouse Picker', email: 'jamal@warehouse.com' },
-  { name: 'Anita Brooks', role: 'Manager', email: 'anita@manager.com' },
+  { name: 'maria', password: 'worker123', role: 'employee' },
+  { name: 'jamal', password: 'warehouse123', role: 'warehouse' },
+  { name: 'anita', password: 'manager123', role: 'manager' },
 ];
 
 const state = loadState();
 
 const scanInput = document.getElementById('scan-input');
 const scanBtn = document.getElementById('scan-btn');
-const refillForm = document.getElementById('refill-form');
+const manualLookupBtn = document.getElementById('manual-lookup-btn');
 const createOrderBtn = document.getElementById('create-order-btn');
 const lowStockList = document.getElementById('low-stock-list');
 const notificationList = document.getElementById('notification-list');
 const outOfStockList = document.getElementById('out-of-stock-list');
 const ordersList = document.getElementById('orders-list');
 const warehouseOrders = document.getElementById('warehouse-orders');
-const deliveryList = document.getElementById('delivery-list');
 const usersList = document.getElementById('users-list');
 const userForm = document.getElementById('user-form');
+const cameraModal = document.getElementById('camera-modal');
+const cameraVideo = document.getElementById('camera-video');
+const cameraStatus = document.getElementById('camera-status');
+const quantityModal = document.getElementById('quantity-modal');
+const quantityItemName = document.getElementById('quantity-item-name');
+const quantityInput = document.getElementById('quantity-input');
+let cameraStream;
+let pendingScannedItem;
 const inventoryUploadInput = document.getElementById('inventory-upload');
 const importInventoryBtn = document.getElementById('import-inventory-btn');
 const downloadTemplateBtn = document.getElementById('download-template-btn');
@@ -44,7 +51,14 @@ const itemFields = {
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved) return saved;
+    if (saved) {
+      saved.users = (saved.users || []).map((user) => ({
+        name: user.name,
+        password: user.password || '',
+        role: user.role === 'Store Worker' ? 'employee' : user.role === 'Warehouse Picker' ? 'warehouse' : (user.role || 'employee').toLowerCase(),
+      }));
+      return saved;
+    }
   } catch (error) {
     console.warn('Unable to load saved state', error);
   }
@@ -144,8 +158,7 @@ function renderOrders() {
         <strong>${order.id}</strong>
         <span class="status-badge ${getStatusClass(order.status)}">${order.status}</span>
       </div>
-      <div>Employee: ${order.employee}</div>
-      <div>Store: ${order.location}</div>
+      <div>Requested by: ${order.employee}</div>
       <div>Created: ${order.createdAt}</div>
       <div>Items: ${order.items.map((item) => `${item.name} (${item.requested})`).join(', ')}</div>
     </div>
@@ -155,32 +168,45 @@ function renderOrders() {
 }
 
 function renderWarehouseOrders() {
-  const cards = state.orders.map((order) => `
+  const cards = state.orders.filter((order) => !['Done', 'Out of Stock'].includes(order.status)).map((order) => `
     <div class="order-card">
       <div class="order-meta">
         <strong>${order.id}</strong>
-        <button data-accept-order="${order.id}" type="button">Accept order</button>
+        <span class="status-badge ${getStatusClass(order.status)}">${order.status}</span>
       </div>
-      <div>Warehouse status: ${order.status}</div>
-      <div>Items to pick:</div>
+      <div class="order-total">Complete order · ${order.items.length} items</div>
+      <div>Enter the cases picked for every item, then accept once.</div>
       <ul>
-        ${order.items.map((item) => `<li>${item.name}: requested ${item.requested}, picked ${item.picked}, unavailable ${item.unavailable}</li>`).join('')}
+        ${order.items.map((item, index) => `<li>${item.name}: requested ${item.requested} cases <input class="picked-input" data-order-id="${order.id}" data-item-index="${index}" type="number" min="0" value="${item.picked || 0}" /></li>`).join('')}
       </ul>
       <div class="button-row">
-        <button data-status-order="${order.id}" data-status="Partially Fulfilled" type="button">Partially fulfil</button>
-        <button data-status-order="${order.id}" data-status="Fully Fulfilled" type="button">Fully fulfil</button>
-        <button data-status-order="${order.id}" data-status="Out of Stock" type="button">Out of stock</button>
+        <button class="primary" data-accept-order="${order.id}" type="button">Accept complete order</button>
+        ${order.status === 'Accepted by Warehouse' ? `<button data-done-order="${order.id}" type="button">Done</button>` : ''}
       </div>
     </div>
   `).join('');
 
   warehouseOrders.innerHTML = cards || '<div class="list-item empty">No warehouse actions pending.</div>';
 
+  warehouseOrders.querySelectorAll('.picked-input').forEach((input) => {
+    input.addEventListener('change', () => {
+      const order = state.orders.find((entry) => entry.id === input.dataset.orderId);
+      if (order) order.items[Number(input.dataset.itemIndex)].picked = Math.max(0, Number(input.value) || 0);
+      saveState();
+    });
+  });
+
   warehouseOrders.querySelectorAll('[data-accept-order]').forEach((button) => {
     button.addEventListener('click', () => {
       const order = state.orders.find((entry) => entry.id === button.dataset.acceptOrder);
       if (order) {
-        order.status = 'Accepted by Warehouse';
+        const hasZero = order.items.some((item) => Number(item.picked) === 0);
+        order.status = hasZero ? 'Out of Stock' : 'Accepted by Warehouse';
+        if (hasZero) {
+          order.items.filter((item) => Number(item.picked) === 0).forEach((item) => {
+            state.alerts.push({ item: item.name, upc: item.sku, requested: item.requested, fulfilled: 0, store: 'Store replenishment', warehouse: 'North Warehouse', date: new Date().toISOString().slice(0, 10), processedBy: 'Warehouse', reason: 'No cases available' });
+          });
+        }
         addNotification(`Warehouse accepted ${order.id}`);
         saveState();
         renderWarehouseOrders();
@@ -190,12 +216,12 @@ function renderWarehouseOrders() {
     });
   });
 
-  warehouseOrders.querySelectorAll('[data-status-order]').forEach((button) => {
+  warehouseOrders.querySelectorAll('[data-done-order]').forEach((button) => {
     button.addEventListener('click', () => {
-      const order = state.orders.find((entry) => entry.id === button.dataset.statusOrder);
+      const order = state.orders.find((entry) => entry.id === button.dataset.doneOrder);
       if (order) {
-        order.status = button.dataset.status;
-        addNotification(`${order.id} marked as ${button.dataset.status}`);
+        order.status = 'Done';
+        addNotification(`${order.id} completed`);
         saveState();
         renderWarehouseOrders();
         renderOrders();
@@ -203,42 +229,7 @@ function renderWarehouseOrders() {
       }
     });
   });
-}
 
-function renderDelivery() {
-  const ready = state.orders.filter((order) => ['Ready for Delivery', 'In Transit', 'Delivered to Store', 'Stocked on Shelf'].includes(order.status));
-
-  deliveryList.innerHTML = ready.length
-    ? ready.map((order) => `
-      <div class="order-card">
-        <div class="order-meta">
-          <strong>${order.id}</strong>
-          <span class="status-badge ${getStatusClass(order.status)}">${order.status}</span>
-        </div>
-        <div>Order sent to store: ${order.location}</div>
-        <div class="button-row">
-          <button data-delivery-status="${order.id}" data-status="Ready for Delivery" type="button">Ready</button>
-          <button data-delivery-status="${order.id}" data-status="In Transit" type="button">In transit</button>
-          <button data-delivery-status="${order.id}" data-status="Delivered to Store" type="button">Delivered</button>
-          <button data-delivery-status="${order.id}" data-status="Stocked on Shelf" type="button">Stocked</button>
-        </div>
-      </div>
-    `).join('')
-    : '<div class="list-item empty">No delivery activity.</div>';
-
-  deliveryList.querySelectorAll('[data-delivery-status]').forEach((button) => {
-    button.addEventListener('click', () => {
-      const order = state.orders.find((entry) => entry.id === button.dataset.deliveryStatus);
-      if (order) {
-        order.status = button.dataset.status;
-        addNotification(`${order.id} moved to ${button.dataset.status}`);
-        saveState();
-        renderDelivery();
-        renderOrders();
-        renderDashboard();
-      }
-    });
-  });
 }
 
 function renderAlerts() {
@@ -261,7 +252,7 @@ function renderUsers() {
       <div>
         <strong>${user.name}</strong><br />
         <span>${user.role}</span><br />
-        <small>${user.email}</small>
+        <small>Username login enabled</small>
       </div>
       <span class="status-badge success">Active</span>
     </div>
@@ -396,7 +387,7 @@ function renderNotifications() {
 function renderDashboard() {
   const lowStock = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point).length;
   const outOfStock = state.alerts.length;
-  const openOrders = state.orders.filter((order) => !['Fully Fulfilled', 'Delivered to Store', 'Stocked on Shelf', 'Cancelled'].includes(order.status)).length;
+  const openOrders = state.orders.filter((order) => !['Done', 'Out of Stock', 'Cancelled'].includes(order.status)).length;
 
   document.getElementById('low-stock-count').textContent = lowStock;
   document.getElementById('out-of-stock-count').textContent = outOfStock;
@@ -415,7 +406,6 @@ function renderDashboard() {
   renderUsers();
   renderOrders();
   renderWarehouseOrders();
-  renderDelivery();
 }
 
 function addNotification(message) {
@@ -426,52 +416,86 @@ function addNotification(message) {
 }
 
 function getStatusClass(status) {
-  if (['Partially Fulfilled', 'In Transit', 'Ready for Delivery', 'Submitted'].includes(status)) return 'warning';
-  if (['Fully Fulfilled', 'Delivered to Store', 'Stocked on Shelf'].includes(status)) return 'success';
+  if (['Submitted', 'Accepted by Warehouse'].includes(status)) return 'warning';
+  if (['Done'].includes(status)) return 'success';
   if (['Out of Stock', 'Cancelled'].includes(status)) return 'danger';
   return '';
 }
 
-scanBtn.addEventListener('click', () => {
-  const item = findInventoryItemByBarcode(scanInput.value);
-  updateItemDetails(item);
-});
+function showQuantityModal(item) {
+  pendingScannedItem = item;
+  quantityItemName.textContent = `${item.sku} · ${item.department}`;
+  quantityInput.value = '1';
+  quantityModal.hidden = false;
+  quantityInput.focus();
+}
 
-refillForm.addEventListener('submit', (event) => {
-  event.preventDefault();
-  const item = findInventoryItemByBarcode(scanInput.value);
-
-  if (!item) {
-    alert('Please scan a valid shelf barcode, UPC, SKU, or item number.');
-    return;
-  }
-
-  const quantity = Number(document.getElementById('requested-qty').value) || 1;
-  const employee = document.getElementById('employee-name').value.trim() || 'Maria Gomez';
-  const storeLocation = document.getElementById('store-location').value.trim() || 'Downtown Store';
-
+function addScannedItem(item, quantity) {
   state.refillList.push({
     sku: item.sku,
     name: item.sku,
     quantity,
     department: item.department,
-    location: storeLocation,
-    employee,
+    location: item.location,
+    employee: 'Current employee',
   });
 
   saveState();
   renderRefillList();
   addNotification(`${item.sku} added to shelf refill list`);
-  refillForm.reset();
-  document.getElementById('requested-qty').value = '1';
-  document.getElementById('store-location').value = storeLocation;
-  document.getElementById('employee-name').value = employee;
-});
+  quantityModal.hidden = true;
+}
+
+function lookupTypedBarcode() {
+  const item = findInventoryItemByBarcode(scanInput.value);
+  updateItemDetails(item);
+  if (item) showQuantityModal(item);
+  else alert('No item found for that barcode.');
+}
+
+async function openCameraScanner() {
+  cameraModal.hidden = false;
+  cameraStatus.textContent = 'Point the camera at the barcode, then press Scan barcode.';
+  if (!navigator.mediaDevices?.getUserMedia) {
+    cameraStatus.textContent = 'Camera access is not available. Enter the barcode below instead.';
+    return;
+  }
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+    cameraVideo.srcObject = cameraStream;
+  } catch (error) {
+    cameraStatus.textContent = 'Camera access was blocked. Enter the barcode below instead.';
+  }
+}
+
+function closeCameraScanner() {
+  cameraStream?.getTracks().forEach((track) => track.stop());
+  cameraStream = undefined;
+  cameraVideo.srcObject = null;
+  cameraModal.hidden = true;
+}
+
+async function scanCameraBarcode() {
+  if (!('BarcodeDetector' in window)) {
+    cameraStatus.textContent = 'Automatic barcode reading is not supported in this browser. Enter the barcode below.';
+    return;
+  }
+  const detector = new BarcodeDetector();
+  const codes = await detector.detect(cameraVideo);
+  if (!codes.length) {
+    cameraStatus.textContent = 'No barcode found yet. Center the barcode and try again.';
+    return;
+  }
+  scanInput.value = codes[0].rawValue;
+  const item = findInventoryItemByBarcode(codes[0].rawValue);
+  closeCameraScanner();
+  if (item) {
+    updateItemDetails(item);
+    showQuantityModal(item);
+  } else alert('Barcode scanned, but no matching item is in inventory.');
+}
 
 createOrderBtn.addEventListener('click', () => {
-  const employee = document.getElementById('employee-name').value.trim() || 'Maria Gomez';
-  const location = document.getElementById('store-location').value.trim() || 'Downtown Store';
-
   if (!state.refillList.length) {
     alert('Add at least one item to the refill list before creating the order.');
     return;
@@ -480,8 +504,8 @@ createOrderBtn.addEventListener('click', () => {
   const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
   const order = {
     id: orderId,
-    employee,
-    location,
+    employee: 'Current employee',
+    location: 'Store replenishment',
     createdAt: new Date().toLocaleString(),
     status: 'Submitted',
     department: state.refillList[0].department || 'General',
@@ -504,18 +528,18 @@ createOrderBtn.addEventListener('click', () => {
   renderOrders();
   renderWarehouseOrders();
   renderDashboard();
-  alert(`Order ${orderId} sent to the warehouse.`);
+  alert(`Order ${orderId} sent as one complete order.`);
 });
 
 userForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const name = document.getElementById('user-name').value.trim();
   const role = document.getElementById('user-role').value.trim();
-  const email = document.getElementById('user-email').value.trim();
+  const password = document.getElementById('user-password').value;
 
-  if (!name || !role || !email) return;
+  if (!name || !role || !password) return;
 
-  state.users.push({ name, role, email });
+  state.users.push({ name, role, password });
   saveState();
   userForm.reset();
   renderUsers();
@@ -536,6 +560,15 @@ inventoryUploadInput.addEventListener('change', () => {
 
 downloadTemplateBtn.addEventListener('click', downloadInventoryTemplate);
 
+scanBtn.addEventListener('click', openCameraScanner);
+manualLookupBtn.addEventListener('click', lookupTypedBarcode);
+document.getElementById('close-camera-btn').addEventListener('click', closeCameraScanner);
+document.getElementById('camera-capture-btn').addEventListener('click', scanCameraBarcode);
+document.getElementById('cancel-quantity-btn').addEventListener('click', () => { quantityModal.hidden = true; });
+document.getElementById('confirm-quantity-btn').addEventListener('click', () => {
+  if (pendingScannedItem) addScannedItem(pendingScannedItem, Math.max(1, Number(quantityInput.value) || 1));
+});
+
 document.querySelectorAll('[data-tab]').forEach((tab) => {
   tab.addEventListener('click', () => {
     const tabId = tab.dataset.tab;
@@ -550,6 +583,5 @@ renderRefillList();
 renderDashboard();
 renderOrders();
 renderWarehouseOrders();
-renderDelivery();
 renderUsers();
 updateItemDetails(findInventoryItemByBarcode('000123456789'));
