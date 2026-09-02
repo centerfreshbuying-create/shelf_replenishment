@@ -3,28 +3,94 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Shelf Replenishment</title>
+    <title>Warehouse Admin</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main class="container">
-      <h1>Shelf Replenishment Planner</h1>
-
-      <section class="panel">
-        <h2>Inventory</h2>
-        <div id="inventory-list" class="inventory-list"></div>
-
-        <div class="button-row">
-          <button id="add-item-btn" type="button">Add Item</button>
-          <button id="calculate-btn" class="primary" type="button">Calculate Replenishment</button>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Operations</p>
+          <h1>Warehouse Admin</h1>
         </div>
-      </section>
 
-      <section class="panel results-panel">
-        <h2>Replenishment Plan</h2>
-        <div id="results" class="results">No items checked yet.</div>
-      </section>
-    </main>
+        <nav class="topnav" aria-label="Main navigation">
+          <button class="tab active" data-tab="dashboard" type="button">Dashboard</button>
+          <button class="tab" data-tab="inventory" type="button">Inventory</button>
+          <button class="tab" data-tab="replenishment" type="button">Replenishment</button>
+          <button class="tab" data-tab="users" type="button">Users</button>
+        </nav>
+      </header>
+
+      <main class="content">
+        <section id="dashboard" class="tab-panel active">
+          <div class="stats-grid">
+            <article class="stat-card">
+              <span>Total SKUs</span>
+              <strong id="total-skus">0</strong>
+            </article>
+            <article class="stat-card warning">
+              <span>Low stock</span>
+              <strong id="low-stock-count">0</strong>
+            </article>
+            <article class="stat-card success">
+              <span>Active users</span>
+              <strong id="active-users">0</strong>
+            </article>
+          </div>
+
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Urgent restock</h2>
+            </div>
+            <div id="low-stock-list" class="list-box"></div>
+          </div>
+        </section>
+
+        <section id="inventory" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Inventory</h2>
+              <button id="add-item-btn" class="primary" type="button">Add Item</button>
+            </div>
+
+            <div id="inventory-list" class="inventory-list"></div>
+
+            <div class="button-row">
+              <button id="calculate-btn" class="primary" type="button">Calculate Replenishment</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="replenishment" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Replenishment plan</h2>
+              <button id="create-order-btn" class="primary" type="button">Create Order</button>
+            </div>
+
+            <div id="results" class="results">No replenishment generated yet.</div>
+          </div>
+        </section>
+
+        <section id="users" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Users</h2>
+            </div>
+
+            <form id="user-form" class="user-form">
+              <input type="text" id="user-name" placeholder="Name" required />
+              <input type="text" id="user-role" placeholder="Role" required />
+              <input type="email" id="user-email" placeholder="Email" required />
+              <button type="submit" class="primary">Add User</button>
+            </form>
+
+            <div id="users-list" class="users-list"></div>
+          </div>
+        </section>
+      </main>
+    </div>
 
     <template id="inventory-row-template">
       <div class="inventory-row">
