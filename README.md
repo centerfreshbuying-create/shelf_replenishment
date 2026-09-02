@@ -1,6 +1,6 @@
 # Shelf Replenishment
 
-A small Python project for calculating replenishment recommendations from inventory data using only the Python standard library.
+A local-first supermarket shelf replenishment dashboard with a Python replenishment engine and browser-based operations workflow.
 
 ## Features
 
@@ -13,6 +13,21 @@ A small Python project for calculating replenishment recommendations from invent
 - Validate inventory values before calculation
 - Generate a replenishment plan for items that need restocking
 - Run a simple local command-line entry point
+- Use Dashboard, Shelf Scan, Orders, Warehouse, Delivery, and Admin options
+- Import all inventory items from `.xlsx`, `.xls`, or `.csv` files
+- Download an inventory import template with all supported replenishment fields
+
+## Browser dashboard
+
+Run the static app from the project folder:
+
+```bash
+python -m http.server 8080
+```
+
+Open `http://localhost:8080` and use **Admin > Inventory import**. The importer accepts flexible names such as `Product Name`, `Item No`, `Barcode`, `Aisle`, `Current Stock`, `Min Stock`, `Par Level`, and `Order Qty`. It also preserves additional columns from the spreadsheet.
+
+The browser Excel parser is installed from the npm dependency in `package.json`; run `npm install` before serving a fresh checkout.
 
 ## Usage
 

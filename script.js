@@ -29,6 +29,7 @@ const usersList = document.getElementById('users-list');
 const userForm = document.getElementById('user-form');
 const inventoryUploadInput = document.getElementById('inventory-upload');
 const importInventoryBtn = document.getElementById('import-inventory-btn');
+const downloadTemplateBtn = document.getElementById('download-template-btn');
 const importStatus = document.getElementById('import-status');
 
 const itemFields = {
@@ -275,34 +276,48 @@ function setImportStatus(message, isError = false) {
 
 function normalizeInventoryRow(row) {
   const textValue = (value) => typeof value === 'string' ? value.trim() : (value ?? '').toString().trim();
+  const normalizedKeys = Object.keys(row).reduce((keys, key) => {
+    keys[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key];
+    return keys;
+  }, {});
+  const valueFor = (...names) => names.map((name) => normalizedKeys[name.toLowerCase().replace(/[^a-z0-9]/g, '')]).find((value) => value !== undefined && value !== '');
+  const numberFor = (fallback, ...names) => {
+    const value = Number(valueFor(...names));
+    return Number.isFinite(value) ? value : fallback;
+  };
 
-  const sku = textValue(row.sku || row.SKU || row.item || row.name || row.Item || row['Item Name']);
-  const itemNumber = textValue(row.itemNumber || row['Item Number'] || row['Item #'] || row.number || row.Number || row.upc || '');
-  const upc = textValue(row.upc || row.UPC || row.barcode || row['Barcode'] || '');
-  const department = textValue(row.department || row.Department || row.category || row.Category || 'General');
-  const location = textValue(row.location || row.Location || row.aisle || row.Aisle || 'Main Floor');
-  const caseQuantity = Number(row.caseQuantity || row['Case Quantity'] || row.case_qty || row['Case Qty'] || 1);
-  const onHand = Number(row.on_hand || row['On Hand'] || row.onHand || row.quantity || row['Qty'] || 0);
-  const safetyStock = Number(row.safety_stock || row['Safety Stock'] || row.safety || row['Safety'] || 0);
-  const reorderPoint = Number(row.reorder_point || row['Reorder Point'] || row.reorder || row['Reorder'] || 0);
-  const reorderQuantity = Number(row.reorder_quantity || row['Reorder Quantity'] || row.reorderQty || row['Reorder Qty'] || 1);
+  const sku = textValue(valueFor('sku', 'item', 'itemname', 'product', 'productname', 'description', 'name'));
+  const itemNumber = textValue(valueFor('itemnumber', 'itemno', 'itemnumber', 'itemid', 'productid', 'number') || '');
+  const upc = textValue(valueFor('upc', 'barcode', 'ean', 'gtin') || '');
+  const department = textValue(valueFor('department', 'category', 'section', 'division') || 'General');
+  const location = textValue(valueFor('location', 'aisle', 'shelf', 'shelfaddress', 'bin') || 'Main Floor');
+  const caseQuantity = numberFor(1, 'casequantity', 'caseqty', 'casepack', 'packsize', 'unitspercase');
+  const onHand = numberFor(0, 'onhand', 'quantity', 'qty', 'stock', 'currentstock', 'available');
+  const safetyStock = numberFor(0, 'safetystock', 'safety', 'minimumstock', 'minstock');
+  const reorderPoint = numberFor(0, 'reorderpoint', 'reorder', 'reorderlevel', 'parlevel', 'targetstock');
+  const reorderQuantity = numberFor(1, 'reorderquantity', 'reorderqty', 'orderquantity', 'orderqty', 'suggestedorder');
 
   if (!sku && !upc && !itemNumber) return null;
 
   const normalizedSku = sku || `ITEM-${(upc || itemNumber || 'new').replace(/\s+/g, '-')}`;
 
-  return {
+  const item = {
     sku: normalizedSku,
     upc: upc || `${normalizedSku}-upc`,
     itemNumber: itemNumber || normalizedSku,
     department,
     location,
-    caseQuantity: Number.isFinite(caseQuantity) && caseQuantity > 0 ? caseQuantity : 1,
-    on_hand: Number.isFinite(onHand) ? onHand : 0,
-    safety_stock: Number.isFinite(safetyStock) ? safetyStock : 0,
-    reorder_point: Number.isFinite(reorderPoint) ? reorderPoint : 0,
-    reorder_quantity: Number.isFinite(reorderQuantity) && reorderQuantity > 0 ? reorderQuantity : 1,
+    caseQuantity: caseQuantity > 0 ? caseQuantity : 1,
+    on_hand: onHand >= 0 ? onHand : 0,
+    safety_stock: safetyStock >= 0 ? safetyStock : 0,
+    reorder_point: reorderPoint >= 0 ? reorderPoint : 0,
+    reorder_quantity: reorderQuantity > 0 ? reorderQuantity : 1,
   };
+
+  Object.entries(row).forEach(([key, value]) => {
+    if (!(key in item) && value !== '') item[key] = value;
+  });
+  return item;
 }
 
 function mergeInventory(existing, imported) {
@@ -362,6 +377,16 @@ function importInventoryFromFile(file) {
   };
 
   reader.readAsArrayBuffer(file);
+}
+
+function downloadInventoryTemplate() {
+  const columns = ['sku', 'upc', 'itemNumber', 'department', 'location', 'caseQuantity', 'on_hand', 'safety_stock', 'reorder_point', 'reorder_quantity'];
+  const example = ['example-item', '000000000000', 'ITEM-001', 'Grocery', 'Aisle 1', 12, 4, 6, 10, 8];
+  const worksheet = XLSX.utils.aoa_to_sheet([columns, example]);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
+  XLSX.writeFile(workbook, 'inventory-import-template.xlsx');
+  setImportStatus('Inventory template downloaded.');
 }
 
 function renderNotifications() {
@@ -506,6 +531,8 @@ inventoryUploadInput.addEventListener('change', () => {
     setImportStatus(`Selected file: ${file.name}`);
   }
 });
+
+downloadTemplateBtn.addEventListener('click', downloadInventoryTemplate);
 
 document.querySelectorAll('.tab').forEach((tab) => {
   tab.addEventListener('click', () => {
