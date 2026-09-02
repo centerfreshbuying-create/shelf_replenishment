@@ -1,203 +1,387 @@
-const inventoryList = document.getElementById('inventory-list');
-const addItemBtn = document.getElementById('add-item-btn');
-const calculateBtn = document.getElementById('calculate-btn');
+const STORAGE_KEY = 'supermarket-replenishment-state';
+
+const defaultInventory = [
+  { sku: 'milk', upc: '000123456789', itemNumber: 'M-101', department: 'Dairy', location: 'Aisle 1', caseQuantity: 12, on_hand: 4, safety_stock: 6, reorder_point: 10, reorder_quantity: 8 },
+  { sku: 'bread', upc: '000987654321', itemNumber: 'B-222', department: 'Bakery', location: 'Aisle 2', caseQuantity: 8, on_hand: 12, safety_stock: 5, reorder_point: 10, reorder_quantity: 6 },
+  { sku: 'eggs', upc: '000456789123', itemNumber: 'E-303', department: 'Dairy', location: 'Aisle 3', caseQuantity: 15, on_hand: 15, safety_stock: 4, reorder_point: 10, reorder_quantity: 7 },
+  { sku: 'juice', upc: '000654321987', itemNumber: 'J-404', department: 'Beverages', location: 'Aisle 5', caseQuantity: 10, on_hand: 3, safety_stock: 5, reorder_point: 8, reorder_quantity: 12 },
+];
+
+const defaultUsers = [
+  { name: 'Maria Gomez', role: 'Store Worker', email: 'maria@store.com' },
+  { name: 'Jamal Lee', role: 'Warehouse Picker', email: 'jamal@warehouse.com' },
+  { name: 'Anita Brooks', role: 'Manager', email: 'anita@manager.com' },
+];
+
+const state = loadState();
+
+const scanInput = document.getElementById('scan-input');
+const scanBtn = document.getElementById('scan-btn');
+const refillForm = document.getElementById('refill-form');
 const createOrderBtn = document.getElementById('create-order-btn');
-const results = document.getElementById('results');
-const usersList = document.getElementById('users-list');
 const lowStockList = document.getElementById('low-stock-list');
-const template = document.getElementById('inventory-row-template');
+const notificationList = document.getElementById('notification-list');
+const outOfStockList = document.getElementById('out-of-stock-list');
+const ordersList = document.getElementById('orders-list');
+const warehouseOrders = document.getElementById('warehouse-orders');
+const deliveryList = document.getElementById('delivery-list');
+const usersList = document.getElementById('users-list');
 const userForm = document.getElementById('user-form');
 
-const state = {
-  inventory: [
-    { sku: 'milk', on_hand: 4, safety_stock: 6, reorder_point: 10, reorder_quantity: 8 },
-    { sku: 'bread', on_hand: 12, safety_stock: 5, reorder_point: 10, reorder_quantity: 6 },
-    { sku: 'eggs', on_hand: 15, safety_stock: 4, reorder_point: 10, reorder_quantity: 7 },
-  ],
-  users: [
-    { name: 'Ava Patel', role: 'Buyer', email: 'ava@company.com' },
-    { name: 'Liam Chen', role: 'Supervisor', email: 'liam@company.com' },
-  ],
-  plan: [],
+const itemFields = {
+  name: document.getElementById('item-name'),
+  upc: document.getElementById('item-upc'),
+  number: document.getElementById('item-number'),
+  department: document.getElementById('item-department'),
+  location: document.getElementById('item-location'),
+  caseQty: document.getElementById('item-case-qty'),
 };
 
-function createRow(values = {}) {
-  const row = template.content.firstElementChild.cloneNode(true);
-  const inputs = row.querySelectorAll('input');
+function loadState() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (saved) return saved;
+  } catch (error) {
+    console.warn('Unable to load saved state', error);
+  }
 
-  inputs[0].value = values.sku || '';
-  inputs[1].value = values.on_hand ?? 0;
-  inputs[2].value = values.safety_stock ?? 0;
-  inputs[3].value = values.reorder_point ?? 0;
-  inputs[4].value = values.reorder_quantity ?? 1;
-
-  row.querySelector('.remove-btn').addEventListener('click', () => {
-    row.remove();
-  });
-
-  return row;
+  return {
+    inventory: defaultInventory,
+    users: defaultUsers,
+    refillList: [
+      { sku: 'milk', name: 'Milk', quantity: 2, department: 'Dairy', location: 'Aisle 1', employee: 'Maria Gomez' },
+      { sku: 'juice', name: 'Juice', quantity: 3, department: 'Beverages', location: 'Aisle 5', employee: 'Maria Gomez' },
+    ],
+    orders: [
+      {
+        id: 'ORD-1001',
+        employee: 'Maria Gomez',
+        location: 'Downtown Store',
+        createdAt: '2026-09-02 08:30',
+        status: 'Submitted',
+        department: 'Dairy',
+        items: [
+          { sku: 'milk', name: 'Milk', requested: 2, picked: 2, unavailable: 0, reason: '', substitute: '' },
+        ],
+      },
+    ],
+    alerts: [
+      { item: 'Juice', upc: '000654321987', requested: 6, fulfilled: 0, store: 'Downtown Store', warehouse: 'North Warehouse', date: '2026-09-02', processedBy: 'Jamal Lee', reason: 'No inventory available' },
+    ],
+    notifications: [
+      'New refill order submitted for Downtown Store',
+      'Warehouse accepted refill order ORD-1001',
+      'Milk order is ready for delivery',
+    ],
+    activeTab: 'dashboard',
+  };
 }
 
-function syncInventoryRows() {
-  const rows = Array.from(inventoryList.querySelectorAll('.inventory-row'));
-
-  rows.forEach((row) => {
-    const inputs = row.querySelectorAll('input');
-    const sku = inputs[0].value.trim();
-    if (!sku) return;
-
-    const existing = state.inventory.find((item) => item.sku.toLowerCase() === sku.toLowerCase());
-    if (existing) {
-      inputs[1].value = existing.on_hand;
-      inputs[2].value = existing.safety_stock;
-      inputs[3].value = existing.reorder_point;
-      inputs[4].value = existing.reorder_quantity;
-    }
-  });
+function saveState() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
 }
 
-function getInventoryItems() {
-  return Array.from(inventoryList.querySelectorAll('.inventory-row')).map((row) => {
-    const inputs = row.querySelectorAll('input');
-    const sku = inputs[0].value.trim();
-
-    if (!sku) {
-      return null;
-    }
-
-    return {
-      sku,
-      on_hand: Number(inputs[1].value) || 0,
-      safety_stock: Number(inputs[2].value) || 0,
-      reorder_point: Number(inputs[3].value) || 0,
-      reorder_quantity: Number(inputs[4].value) || 1,
-    };
-  }).filter(Boolean);
+function findInventoryItemByBarcode(value) {
+  const query = value.trim().toLowerCase();
+  return state.inventory.find((item) => item.upc === query || item.sku.toLowerCase() === query || item.itemNumber.toLowerCase() === query);
 }
 
-function calculatePlan(items) {
-  return items
-    .filter((item) => item.on_hand + item.safety_stock <= item.reorder_point)
-    .map((item) => ({
-      sku: item.sku,
-      reorder_quantity: item.reorder_quantity,
-      reason: 'below reorder point',
-    }));
-}
-
-function renderResults(plan) {
-  state.plan = plan;
-
-  if (!plan.length) {
-    results.textContent = 'No replenishment required.';
-    results.className = 'results empty';
+function updateItemDetails(item) {
+  if (!item) {
+    itemFields.name.textContent = '-';
+    itemFields.upc.textContent = '-';
+    itemFields.number.textContent = '-';
+    itemFields.department.textContent = '-';
+    itemFields.location.textContent = '-';
+    itemFields.caseQty.textContent = '-';
     return;
   }
 
-  results.className = 'results';
-  results.innerHTML = plan
-    .map(
-      (item) =>
-        `<div class="result-item">${item.sku}: reorder ${item.reorder_quantity} units (${item.reason})</div>`
-    )
-    .join('');
+  itemFields.name.textContent = item.sku;
+  itemFields.upc.textContent = item.upc;
+  itemFields.number.textContent = item.itemNumber;
+  itemFields.department.textContent = item.department;
+  itemFields.location.textContent = item.location;
+  itemFields.caseQty.textContent = item.caseQuantity;
 }
 
-function renderLowStock() {
-  const lowStock = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point);
-
-  if (!lowStock.length) {
-    lowStockList.innerHTML = '<div class="low-stock-item empty">No critical stock alerts.</div>';
+function renderRefillList() {
+  const list = document.getElementById('refill-list');
+  if (!state.refillList.length) {
+    list.innerHTML = '<div class="list-item empty">No items on the refill list.</div>';
     return;
   }
 
-  lowStockList.innerHTML = lowStock
-    .map(
-      (item) =>
-        `<div class="low-stock-item"><strong>${item.sku}</strong><br />Qty: ${item.on_hand} · Safety: ${item.safety_stock} · Reorder point: ${item.reorder_point}</div>`
-    )
-    .join('');
+  list.innerHTML = state.refillList.map((item, index) => `
+    <div class="list-item">
+      <div class="order-meta">
+        <strong>${item.name}</strong>
+        <button class="danger" data-remove-item="${index}" type="button">Remove</button>
+      </div>
+      <div>Qty: ${item.quantity} · Dept: ${item.department} · Location: ${item.location}</div>
+    </div>
+  `).join('');
+
+  list.querySelectorAll('[data-remove-item]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const index = Number(button.dataset.removeItem);
+      state.refillList.splice(index, 1);
+      saveState();
+      renderRefillList();
+      renderDashboard();
+    });
+  });
+}
+
+function renderOrders() {
+  const orderCards = state.orders.map((order) => `
+    <div class="order-card">
+      <div class="order-meta">
+        <strong>${order.id}</strong>
+        <span class="status-badge ${getStatusClass(order.status)}">${order.status}</span>
+      </div>
+      <div>Employee: ${order.employee}</div>
+      <div>Store: ${order.location}</div>
+      <div>Created: ${order.createdAt}</div>
+      <div>Items: ${order.items.map((item) => `${item.name} (${item.requested})`).join(', ')}</div>
+    </div>
+  `).join('');
+
+  ordersList.innerHTML = orderCards || '<div class="list-item empty">No submitted orders yet.</div>';
+}
+
+function renderWarehouseOrders() {
+  const cards = state.orders.map((order) => `
+    <div class="order-card">
+      <div class="order-meta">
+        <strong>${order.id}</strong>
+        <button data-accept-order="${order.id}" type="button">Accept order</button>
+      </div>
+      <div>Warehouse status: ${order.status}</div>
+      <div>Items to pick:</div>
+      <ul>
+        ${order.items.map((item) => `<li>${item.name}: requested ${item.requested}, picked ${item.picked}, unavailable ${item.unavailable}</li>`).join('')}
+      </ul>
+      <div class="button-row">
+        <button data-status-order="${order.id}" data-status="Partially Fulfilled" type="button">Partially fulfil</button>
+        <button data-status-order="${order.id}" data-status="Fully Fulfilled" type="button">Fully fulfil</button>
+        <button data-status-order="${order.id}" data-status="Out of Stock" type="button">Out of stock</button>
+      </div>
+    </div>
+  `).join('');
+
+  warehouseOrders.innerHTML = cards || '<div class="list-item empty">No warehouse actions pending.</div>';
+
+  warehouseOrders.querySelectorAll('[data-accept-order]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const order = state.orders.find((entry) => entry.id === button.dataset.acceptOrder);
+      if (order) {
+        order.status = 'Accepted by Warehouse';
+        addNotification(`Warehouse accepted ${order.id}`);
+        saveState();
+        renderWarehouseOrders();
+        renderOrders();
+        renderDashboard();
+      }
+    });
+  });
+
+  warehouseOrders.querySelectorAll('[data-status-order]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const order = state.orders.find((entry) => entry.id === button.dataset.statusOrder);
+      if (order) {
+        order.status = button.dataset.status;
+        addNotification(`${order.id} marked as ${button.dataset.status}`);
+        saveState();
+        renderWarehouseOrders();
+        renderOrders();
+        renderDashboard();
+      }
+    });
+  });
+}
+
+function renderDelivery() {
+  const ready = state.orders.filter((order) => ['Ready for Delivery', 'In Transit', 'Delivered to Store', 'Stocked on Shelf'].includes(order.status));
+
+  deliveryList.innerHTML = ready.length
+    ? ready.map((order) => `
+      <div class="order-card">
+        <div class="order-meta">
+          <strong>${order.id}</strong>
+          <span class="status-badge ${getStatusClass(order.status)}">${order.status}</span>
+        </div>
+        <div>Order sent to store: ${order.location}</div>
+        <div class="button-row">
+          <button data-delivery-status="${order.id}" data-status="Ready for Delivery" type="button">Ready</button>
+          <button data-delivery-status="${order.id}" data-status="In Transit" type="button">In transit</button>
+          <button data-delivery-status="${order.id}" data-status="Delivered to Store" type="button">Delivered</button>
+          <button data-delivery-status="${order.id}" data-status="Stocked on Shelf" type="button">Stocked</button>
+        </div>
+      </div>
+    `).join('')
+    : '<div class="list-item empty">No delivery activity.</div>';
+
+  deliveryList.querySelectorAll('[data-delivery-status]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const order = state.orders.find((entry) => entry.id === button.dataset.deliveryStatus);
+      if (order) {
+        order.status = button.dataset.status;
+        addNotification(`${order.id} moved to ${button.dataset.status}`);
+        saveState();
+        renderDelivery();
+        renderOrders();
+        renderDashboard();
+      }
+    });
+  });
+}
+
+function renderAlerts() {
+  const items = state.alerts;
+  outOfStockList.innerHTML = items.length
+    ? items.map((alert) => `
+      <div class="alert-item">
+        <div><strong>${alert.item}</strong> · ${alert.upc}</div>
+        <div>Requested: ${alert.requested} · Fulfilled: ${alert.fulfilled}</div>
+        <div>Store: ${alert.store} · Warehouse: ${alert.warehouse}</div>
+        <div>Reason: ${alert.reason}</div>
+      </div>
+    `).join('')
+    : '<div class="list-item empty">No stock alerts.</div>';
 }
 
 function renderUsers() {
-  if (!state.users.length) {
-    usersList.innerHTML = '<div class="user-item empty">No active users.</div>';
-    return;
-  }
-
-  usersList.innerHTML = state.users
-    .map(
-      (user) =>
-        `<div class="user-item"><div class="user-meta"><strong>${user.name}</strong><span>${user.role}</span><small>${user.email}</small></div><span class="badge">Active</span></div>`
-    )
-    .join('');
+  usersList.innerHTML = state.users.map((user) => `
+    <div class="user-item">
+      <div>
+        <strong>${user.name}</strong><br />
+        <span>${user.role}</span><br />
+        <small>${user.email}</small>
+      </div>
+      <span class="status-badge success">Active</span>
+    </div>
+  `).join('');
 }
 
-function renderStats() {
-  const total = state.inventory.length;
+function renderNotifications() {
+  notificationList.innerHTML = state.notifications.slice(0, 5).map((message) => `<div class="list-item">${message}</div>`).join('');
+}
+
+function renderDashboard() {
   const lowStock = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point).length;
-  const activeUsers = state.users.length;
+  const outOfStock = state.alerts.length;
+  const openOrders = state.orders.filter((order) => !['Fully Fulfilled', 'Delivered to Store', 'Stocked on Shelf', 'Cancelled'].includes(order.status)).length;
 
-  document.getElementById('total-skus').textContent = total;
   document.getElementById('low-stock-count').textContent = lowStock;
-  document.getElementById('active-users').textContent = activeUsers;
+  document.getElementById('out-of-stock-count').textContent = outOfStock;
+  document.getElementById('open-orders').textContent = openOrders;
+  document.getElementById('active-users').textContent = state.users.length;
+
+  const urgent = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point);
+  lowStockList.innerHTML = urgent.length
+    ? urgent.map((item) => `<div class="list-item"><strong>${item.sku}</strong> · ${item.department} · reorder qty ${item.reorder_quantity}</div>`).join('')
+    : '<div class="list-item empty">No urgent stock issues.</div>';
+
+  renderNotifications();
+  renderAlerts();
+  renderUsers();
+  renderOrders();
+  renderWarehouseOrders();
+  renderDelivery();
 }
 
-function renderInventoryFromState() {
-  inventoryList.innerHTML = '';
-  state.inventory.forEach((item) => {
-    inventoryList.appendChild(createRow(item));
-  });
+function addNotification(message) {
+  state.notifications.unshift(message);
+  state.notifications = state.notifications.slice(0, 8);
+  saveState();
+  renderNotifications();
 }
 
-function setActiveTab(tabId) {
-  document.querySelectorAll('.tab').forEach((tab) => {
-    tab.classList.toggle('active', tab.dataset.tab === tabId);
-  });
-
-  document.querySelectorAll('.tab-panel').forEach((panel) => {
-    panel.classList.toggle('active', panel.id === tabId);
-  });
+function getStatusClass(status) {
+  if (['Partially Fulfilled', 'In Transit', 'Ready for Delivery', 'Submitted'].includes(status)) return 'warning';
+  if (['Fully Fulfilled', 'Delivered to Store', 'Stocked on Shelf'].includes(status)) return 'success';
+  if (['Out of Stock', 'Cancelled'].includes(status)) return 'danger';
+  return '';
 }
 
-addItemBtn.addEventListener('click', () => {
-  inventoryList.appendChild(
-    createRow({
-      sku: '',
-      on_hand: 0,
-      safety_stock: 0,
-      reorder_point: 0,
-      reorder_quantity: 1,
-    })
-  );
+scanBtn.addEventListener('click', () => {
+  const item = findInventoryItemByBarcode(scanInput.value);
+  updateItemDetails(item);
 });
 
-calculateBtn.addEventListener('click', () => {
-  const items = getInventoryItems();
-  if (!items.length) {
-    renderResults([]);
+refillForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  const item = findInventoryItemByBarcode(scanInput.value);
+
+  if (!item) {
+    alert('Please scan a valid shelf barcode, UPC, SKU, or item number.');
     return;
   }
 
-  renderResults(calculatePlan(items));
-  state.inventory = items;
-  renderStats();
-  renderLowStock();
+  const quantity = Number(document.getElementById('requested-qty').value) || 1;
+  const employee = document.getElementById('employee-name').value.trim() || 'Maria Gomez';
+  const storeLocation = document.getElementById('store-location').value.trim() || 'Downtown Store';
+
+  state.refillList.push({
+    sku: item.sku,
+    name: item.sku,
+    quantity,
+    department: item.department,
+    location: storeLocation,
+    employee,
+  });
+
+  saveState();
+  renderRefillList();
+  addNotification(`${item.sku} added to shelf refill list`);
+  refillForm.reset();
+  document.getElementById('requested-qty').value = '1';
+  document.getElementById('store-location').value = storeLocation;
+  document.getElementById('employee-name').value = employee;
 });
 
 createOrderBtn.addEventListener('click', () => {
-  if (!state.plan.length) {
-    renderResults(calculatePlan(state.inventory.length ? state.inventory : getInventoryItems()));
+  const employee = document.getElementById('employee-name').value.trim() || 'Maria Gomez';
+  const location = document.getElementById('store-location').value.trim() || 'Downtown Store';
+
+  if (!state.refillList.length) {
+    alert('Add at least one item to the refill list before creating the order.');
+    return;
   }
 
-  results.innerHTML = `
-    <div class="result-item">Purchase order created for ${state.plan.length || calculatePlan(getInventoryItems()).length} item(s).</div>
-  `;
+  const orderId = `ORD-${Math.floor(1000 + Math.random() * 9000)}`;
+  const order = {
+    id: orderId,
+    employee,
+    location,
+    createdAt: new Date().toLocaleString(),
+    status: 'Submitted',
+    department: state.refillList[0].department || 'General',
+    items: state.refillList.map((entry) => ({
+      sku: entry.sku,
+      name: entry.name,
+      requested: entry.quantity,
+      picked: 0,
+      unavailable: 0,
+      substitute: '',
+      reason: '',
+    })),
+  };
+
+  state.orders.unshift(order);
+  state.refillList = [];
+  state.notifications.unshift(`New refill order ${orderId} submitted by ${employee}`);
+  saveState();
+  renderRefillList();
+  renderOrders();
+  renderWarehouseOrders();
+  renderDashboard();
+  alert(`Order ${orderId} sent to the warehouse.`);
 });
 
 userForm.addEventListener('submit', (event) => {
   event.preventDefault();
-
   const name = document.getElementById('user-name').value.trim();
   const role = document.getElementById('user-role').value.trim();
   const email = document.getElementById('user-email').value.trim();
@@ -205,17 +389,26 @@ userForm.addEventListener('submit', (event) => {
   if (!name || !role || !email) return;
 
   state.users.push({ name, role, email });
+  saveState();
   userForm.reset();
   renderUsers();
-  renderStats();
+  renderDashboard();
 });
 
 document.querySelectorAll('.tab').forEach((tab) => {
-  tab.addEventListener('click', () => setActiveTab(tab.dataset.tab));
+  tab.addEventListener('click', () => {
+    const tabId = tab.dataset.tab;
+    document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === tabId));
+    document.querySelectorAll('.tab-panel').forEach((panel) => panel.classList.toggle('active', panel.id === tabId));
+    state.activeTab = tabId;
+    saveState();
+  });
 });
 
-renderInventoryFromState();
+renderRefillList();
+renderDashboard();
+renderOrders();
+renderWarehouseOrders();
+renderDelivery();
 renderUsers();
-renderLowStock();
-renderStats();
-renderResults(calculatePlan(state.inventory));
+updateItemDetails(findInventoryItemByBarcode('000123456789'));

@@ -3,22 +3,24 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Warehouse Admin</title>
+    <title>Supermarket Shelf Replenishment</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Operations</p>
-          <h1>Warehouse Admin</h1>
+          <p class="eyebrow">Operations platform</p>
+          <h1>Supermarket Replenishment</h1>
         </div>
 
         <nav class="topnav" aria-label="Main navigation">
           <button class="tab active" data-tab="dashboard" type="button">Dashboard</button>
-          <button class="tab" data-tab="inventory" type="button">Inventory</button>
-          <button class="tab" data-tab="replenishment" type="button">Replenishment</button>
-          <button class="tab" data-tab="users" type="button">Users</button>
+          <button class="tab" data-tab="scan" type="button">Shelf Scan</button>
+          <button class="tab" data-tab="orders" type="button">Orders</button>
+          <button class="tab" data-tab="warehouse" type="button">Warehouse</button>
+          <button class="tab" data-tab="delivery" type="button">Delivery</button>
+          <button class="tab" data-tab="admin" type="button">Admin</button>
         </nav>
       </header>
 
@@ -26,82 +28,145 @@
         <section id="dashboard" class="tab-panel active">
           <div class="stats-grid">
             <article class="stat-card">
-              <span>Total SKUs</span>
-              <strong id="total-skus">0</strong>
+              <span>Open orders</span>
+              <strong id="open-orders">0</strong>
             </article>
             <article class="stat-card warning">
-              <span>Low stock</span>
+              <span>Low stock items</span>
               <strong id="low-stock-count">0</strong>
             </article>
             <article class="stat-card success">
+              <span>Out-of-stock alerts</span>
+              <strong id="out-of-stock-count">0</strong>
+            </article>
+            <article class="stat-card info">
               <span>Active users</span>
               <strong id="active-users">0</strong>
             </article>
           </div>
 
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Urgent restock</h2>
-            </div>
-            <div id="low-stock-list" class="list-box"></div>
-          </div>
-        </section>
-
-        <section id="inventory" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Inventory</h2>
-              <button id="add-item-btn" class="primary" type="button">Add Item</button>
+          <div class="panel-grid">
+            <div class="panel-box">
+              <div class="panel-header">
+                <h2>Urgent refill list</h2>
+              </div>
+              <div id="low-stock-list" class="list-box"></div>
             </div>
 
-            <div id="inventory-list" class="inventory-list"></div>
-
-            <div class="button-row">
-              <button id="calculate-btn" class="primary" type="button">Calculate Replenishment</button>
+            <div class="panel-box">
+              <div class="panel-header">
+                <h2>Recent notifications</h2>
+              </div>
+              <div id="notification-list" class="list-box"></div>
             </div>
           </div>
         </section>
 
-        <section id="replenishment" class="tab-panel">
+        <section id="scan" class="tab-panel">
           <div class="panel-box">
             <div class="panel-header">
-              <h2>Replenishment plan</h2>
-              <button id="create-order-btn" class="primary" type="button">Create Order</button>
+              <h2>Shelf scanning</h2>
             </div>
 
-            <div id="results" class="results">No replenishment generated yet.</div>
-          </div>
-        </section>
+            <div class="scan-grid">
+              <div class="scan-form">
+                <label>
+                  Shelf barcode
+                  <input id="scan-input" type="text" placeholder="Scan shelf label or UPC" />
+                </label>
+                <button id="scan-btn" class="primary" type="button">Lookup item</button>
+              </div>
 
-        <section id="users" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Users</h2>
+              <div class="item-card" id="item-details">
+                <h3>Item details</h3>
+                <p><strong>Name:</strong> <span id="item-name">-</span></p>
+                <p><strong>UPC:</strong> <span id="item-upc">-</span></p>
+                <p><strong>Item number:</strong> <span id="item-number">-</span></p>
+                <p><strong>Department:</strong> <span id="item-department">-</span></p>
+                <p><strong>Location:</strong> <span id="item-location">-</span></p>
+                <p><strong>Case quantity:</strong> <span id="item-case-qty">-</span></p>
+              </div>
             </div>
 
-            <form id="user-form" class="user-form">
-              <input type="text" id="user-name" placeholder="Name" required />
-              <input type="text" id="user-role" placeholder="Role" required />
-              <input type="email" id="user-email" placeholder="Email" required />
-              <button type="submit" class="primary">Add User</button>
+            <form id="refill-form" class="refill-form">
+              <label>
+                Cases or units needed
+                <input id="requested-qty" type="number" min="1" value="1" />
+              </label>
+              <label>
+                Store location
+                <input id="store-location" type="text" value="Downtown Store" />
+              </label>
+              <label>
+                Employee name
+                <input id="employee-name" type="text" value="Maria Gomez" />
+              </label>
+              <button class="primary" type="submit">Add to refill list</button>
             </form>
 
-            <div id="users-list" class="users-list"></div>
+            <div class="panel-header subheader">
+              <h3>Refill list</h3>
+            </div>
+            <div id="refill-list" class="list-box"></div>
+
+            <div class="button-row">
+              <button id="create-order-btn" class="primary" type="button">Create Order</button>
+            </div>
+          </div>
+        </section>
+
+        <section id="orders" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Submitted orders</h2>
+            </div>
+            <div id="orders-list" class="order-list"></div>
+          </div>
+        </section>
+
+        <section id="warehouse" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Warehouse picking</h2>
+            </div>
+            <div id="warehouse-orders" class="order-list"></div>
+          </div>
+        </section>
+
+        <section id="delivery" class="tab-panel">
+          <div class="panel-box">
+            <div class="panel-header">
+              <h2>Delivery tracking</h2>
+            </div>
+            <div id="delivery-list" class="order-list"></div>
+          </div>
+        </section>
+
+        <section id="admin" class="tab-panel">
+          <div class="panel-grid">
+            <div class="panel-box">
+              <div class="panel-header">
+                <h2>User roles</h2>
+              </div>
+              <form id="user-form" class="user-form">
+                <input id="user-name" type="text" placeholder="Name" required />
+                <input id="user-role" type="text" placeholder="Role" required />
+                <input id="user-email" type="email" placeholder="Email" required />
+                <button type="submit" class="primary">Add user</button>
+              </form>
+              <div id="users-list" class="list-box"></div>
+            </div>
+
+            <div class="panel-box">
+              <div class="panel-header">
+                <h2>Out-of-stock alerts</h2>
+              </div>
+              <div id="out-of-stock-list" class="list-box"></div>
+            </div>
           </div>
         </section>
       </main>
     </div>
-
-    <template id="inventory-row-template">
-      <div class="inventory-row">
-        <input type="text" name="sku" placeholder="SKU" aria-label="SKU" />
-        <input type="number" name="on_hand" placeholder="On hand" min="0" value="0" />
-        <input type="number" name="safety_stock" placeholder="Safety stock" min="0" value="0" />
-        <input type="number" name="reorder_point" placeholder="Reorder point" min="0" value="0" />
-        <input type="number" name="reorder_quantity" placeholder="Reorder qty" min="1" value="1" />
-        <button type="button" class="remove-btn">Remove</button>
-      </div>
-    </template>
 
     <script src="script.js"></script>
   </body>
