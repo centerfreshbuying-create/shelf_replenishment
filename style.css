@@ -284,3 +284,85 @@ button.danger {
     align-items: flex-start;
   }
 }
+
+/* Worker mode: large targets, strong hierarchy, and a calmer mobile rhythm. */
+:root {
+  --bg: #e7f3f6;
+  --panel: #ffffff;
+  --panel-alt: #f4fafb;
+  --border: #cfe2e6;
+  --primary: #087e9b;
+  --primary-dark: #056176;
+  --text: #17343b;
+  --muted: #607a82;
+  --shadow: 0 16px 36px rgba(18, 75, 87, 0.12);
+}
+
+body {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  background: linear-gradient(150deg, #d9eef1 0%, #f6fbfb 48%, #c9eaf0 100%);
+  min-height: 100vh;
+}
+
+.app-shell { max-width: 1180px; margin: 0 auto; padding: 24px 22px 48px; }
+.topbar { border: 0; border-radius: 20px; padding: 18px 22px; margin-bottom: 22px; }
+.topbar h1 { letter-spacing: 0.02em; margin-bottom: 0; }
+.topnav { justify-content: flex-end; }
+.tab { min-height: 42px; background: #f0f8f9; }
+.tab.active { background: var(--primary); }
+.worker-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: end;
+  gap: 18px;
+  padding: 10px 4px 22px;
+}
+.worker-hero h2 { margin-bottom: 6px; font-size: clamp(1.7rem, 3vw, 2.5rem); }
+.hero-copy { color: var(--muted); margin-bottom: 0; }
+.shift-status { background: rgba(255,255,255,.72); border: 1px solid var(--border); padding: 12px 15px; border-radius: 12px; color: var(--muted); white-space: nowrap; }
+.shift-status strong { color: var(--text); margin-left: 10px; }
+.live-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #23a66f; margin-right: 7px; box-shadow: 0 0 0 4px #d8f2e7; }
+.work-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.work-tile {
+  position: relative;
+  min-height: 190px;
+  border: 1px solid rgba(18, 75, 87, .12);
+  border-radius: 18px;
+  padding: 22px 18px 18px;
+  text-align: left;
+  color: var(--text);
+  box-shadow: 0 12px 22px rgba(18,75,87,.12);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.work-tile:hover, .work-tile:focus-visible { transform: translateY(-3px); box-shadow: 0 18px 30px rgba(18,75,87,.2); }
+.work-tile.inbound { background: linear-gradient(145deg, #e7f8f3, #ffffff); }
+.work-tile.outbound { background: linear-gradient(145deg, #e5f4fb, #ffffff); }
+.work-tile.inventory { background: linear-gradient(145deg, #f4f6e8, #ffffff); }
+.work-tile.replenishment { background: linear-gradient(145deg, #fff2e1, #ffffff); }
+.tile-icon { display: grid; place-items: center; width: 58px; height: 58px; margin-bottom: 25px; border-radius: 16px; background: #ffffff; color: var(--primary); border: 1px solid rgba(8,126,155,.2); font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
+.tile-label { display: block; font-size: 1.18rem; font-weight: 700; margin-bottom: 4px; }
+.work-tile small { display: block; color: var(--muted); font-size: .82rem; }
+.tile-count { position: absolute; top: 18px; right: 16px; color: var(--primary); font-size: .76rem; }
+.quick-actions { display: flex; gap: 10px; margin: 0 0 24px; overflow-x: auto; padding-bottom: 2px; }
+.quick-action { background: rgba(255,255,255,.78); border: 1px solid var(--border); border-radius: 11px; color: var(--text); min-height: 44px; white-space: nowrap; }
+.quick-action span { color: var(--primary); font-size: .68rem; font-weight: 700; margin-right: 8px; }
+.text-button { background: transparent; border: 0; color: var(--primary); padding: 6px 0; font-weight: 700; }
+.panel-box, .stat-card { border-radius: 16px; }
+.panel-header .eyebrow { margin-bottom: 4px; }
+.panel-header h2 { margin-bottom: 0; }
+.stats-grid { gap: 12px; }
+.stat-card { box-shadow: 0 8px 20px rgba(18,75,87,.07); }
+.stat-card strong { color: var(--primary-dark); }
+
+@media (max-width: 900px) {
+  .app-shell { padding: 12px 12px 32px; }
+  .topbar { position: sticky; top: 0; z-index: 5; padding: 14px; border-radius: 0 0 18px 18px; margin: -12px -12px 16px; }
+  .topbar h1 { font-size: 1.35rem; }
+  .topnav { width: 100%; flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding-bottom: 2px; }
+  .tab { flex: 0 0 auto; min-height: 40px; }
+  .worker-hero { display: block; padding: 6px 2px 18px; }
+  .shift-status { display: inline-block; margin-top: 14px; }
+  .work-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .work-tile { min-height: 170px; padding: 16px 14px; }
+  .tile-icon { margin-bottom: 20px; }
+}

@@ -10,8 +10,8 @@
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">Operations platform</p>
-          <h1>Supermarket Replenishment</h1>
+          <p class="eyebrow">North Warehouse · Shift 1</p>
+          <h1>StockFlow</h1>
         </div>
 
         <nav class="topnav" aria-label="Main navigation">
@@ -26,6 +26,48 @@
 
       <main class="content">
         <section id="dashboard" class="tab-panel active">
+          <div class="worker-hero">
+            <div>
+              <p class="eyebrow">Good morning, Maria</p>
+              <h2>What are you working on?</h2>
+              <p class="hero-copy">Choose a task to start. Your progress saves automatically.</p>
+            </div>
+            <div class="shift-status"><span class="live-dot"></span> On shift <strong>05:27 PM</strong></div>
+          </div>
+
+          <div class="work-grid" aria-label="Warehouse work areas">
+            <button class="work-tile inbound" data-tab="warehouse" type="button">
+              <span class="tile-icon">IN</span>
+              <span class="tile-label">Inbound</span>
+              <small>Receive and put away</small>
+              <strong class="tile-count">3 tasks</strong>
+            </button>
+            <button class="work-tile outbound" data-tab="orders" type="button">
+              <span class="tile-icon">OUT</span>
+              <span class="tile-label">Outbound</span>
+              <small>Pick store orders</small>
+              <strong class="tile-count">2 ready</strong>
+            </button>
+            <button class="work-tile inventory" data-tab="scan" type="button">
+              <span class="tile-icon">INV</span>
+              <span class="tile-label">Inventory</span>
+              <small>Count and locate items</small>
+              <strong class="tile-count" id="inventory-item-count">0 items</strong>
+            </button>
+            <button class="work-tile replenishment" data-tab="scan" type="button">
+              <span class="tile-icon">REP</span>
+              <span class="tile-label">Replenishment</span>
+              <small>Restock store shelves</small>
+              <strong class="tile-count" id="replenishment-task-count">0 tasks</strong>
+            </button>
+          </div>
+
+          <div class="quick-actions">
+            <button class="quick-action" data-tab="scan" type="button"><span>SCAN</span> Scan an item</button>
+            <button class="quick-action" data-tab="delivery" type="button"><span>MOVE</span> Track a delivery</button>
+            <button class="quick-action" data-tab="admin" type="button"><span>FILE</span> Import inventory</button>
+          </div>
+
           <div class="stats-grid">
             <article class="stat-card">
               <span>Open orders</span>
@@ -48,14 +90,16 @@
           <div class="panel-grid">
             <div class="panel-box">
               <div class="panel-header">
-                <h2>Urgent refill list</h2>
+                <div><p class="eyebrow">Next actions</p><h2>Urgent refill list</h2></div>
+                <button class="text-button" data-tab="scan" type="button">View all</button>
               </div>
               <div id="low-stock-list" class="list-box"></div>
             </div>
 
             <div class="panel-box">
               <div class="panel-header">
-                <h2>Recent notifications</h2>
+                <div><p class="eyebrow">Live updates</p><h2>Recent notifications</h2></div>
+                <span class="status-badge success">Synced</span>
               </div>
               <div id="notification-list" class="list-box"></div>
             </div>
@@ -184,7 +228,7 @@
       </main>
     </div>
 
-    <script src="./node_modules/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="./vendor/xlsx.full.min.js"></script>
     <script src="script.js"></script>
   </body>
 </html>

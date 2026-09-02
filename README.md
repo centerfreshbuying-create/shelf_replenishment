@@ -27,7 +27,7 @@ python -m http.server 8080
 
 Open `http://localhost:8080` and use **Admin > Inventory import**. The importer accepts flexible names such as `Product Name`, `Item No`, `Barcode`, `Aisle`, `Current Stock`, `Min Stock`, `Par Level`, and `Order Qty`. It also preserves additional columns from the spreadsheet.
 
-The browser Excel parser is installed from the npm dependency in `package.json`; run `npm install` before serving a fresh checkout.
+The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, so the static app works after a direct GitHub or Netlify import without a build step.
 
 ## Usage
 

@@ -402,6 +402,8 @@ function renderDashboard() {
   document.getElementById('out-of-stock-count').textContent = outOfStock;
   document.getElementById('open-orders').textContent = openOrders;
   document.getElementById('active-users').textContent = state.users.length;
+  document.getElementById('inventory-item-count').textContent = `${state.inventory.length} items`;
+  document.getElementById('replenishment-task-count').textContent = `${lowStock} tasks`;
 
   const urgent = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point);
   lowStockList.innerHTML = urgent.length
@@ -534,7 +536,7 @@ inventoryUploadInput.addEventListener('change', () => {
 
 downloadTemplateBtn.addEventListener('click', downloadInventoryTemplate);
 
-document.querySelectorAll('.tab').forEach((tab) => {
+document.querySelectorAll('[data-tab]').forEach((tab) => {
   tab.addEventListener('click', () => {
     const tabId = tab.dataset.tab;
     document.querySelectorAll('.tab').forEach((button) => button.classList.toggle('active', button.dataset.tab === tabId));
