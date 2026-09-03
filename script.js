@@ -1,10 +1,10 @@
 const STORAGE_KEY = 'supermarket-replenishment-state';
 
 const defaultInventory = [
-  { sku: 'milk', upc: '000123456789', itemNumber: 'M-101', department: 'Dairy', location: 'Aisle 1', caseQuantity: 12, on_hand: 4, safety_stock: 6, reorder_point: 10, reorder_quantity: 8 },
-  { sku: 'bread', upc: '000987654321', itemNumber: 'B-222', department: 'Bakery', location: 'Aisle 2', caseQuantity: 8, on_hand: 12, safety_stock: 5, reorder_point: 10, reorder_quantity: 6 },
-  { sku: 'eggs', upc: '000456789123', itemNumber: 'E-303', department: 'Dairy', location: 'Aisle 3', caseQuantity: 15, on_hand: 15, safety_stock: 4, reorder_point: 10, reorder_quantity: 7 },
-  { sku: 'juice', upc: '000654321987', itemNumber: 'J-404', department: 'Beverages', location: 'Aisle 5', caseQuantity: 10, on_hand: 3, safety_stock: 5, reorder_point: 8, reorder_quantity: 12 },
+  { description: 'Milk', upc: '000123456789', location: 'Aisle 1', on_hand: 4, safety_stock: 6 },
+  { description: 'Bread', upc: '000987654321', location: 'Aisle 2', on_hand: 12, safety_stock: 5 },
+  { description: 'Eggs', upc: '000456789123', location: 'Aisle 3', on_hand: 15, safety_stock: 4 },
+  { description: 'Juice', upc: '000654321987', location: 'Aisle 5', on_hand: 3, safety_stock: 5 },
 ];
 
 const defaultUsers = [
@@ -40,18 +40,18 @@ const downloadTemplateBtn = document.getElementById('download-template-btn');
 const importStatus = document.getElementById('import-status');
 
 const itemFields = {
-  name: document.getElementById('item-name'),
+  description: document.getElementById('item-description'),
   upc: document.getElementById('item-upc'),
-  number: document.getElementById('item-number'),
-  department: document.getElementById('item-department'),
   location: document.getElementById('item-location'),
-  caseQty: document.getElementById('item-case-qty'),
+  onHand: document.getElementById('item-on-hand'),
+  safetyStock: document.getElementById('item-safety-stock'),
 };
 
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved) {
+      saved.inventory = (saved.inventory || []).map(normalizeInventoryRow).filter(Boolean);
       saved.users = (saved.users || []).map((user) => ({
         name: user.name,
         password: user.password || '',
@@ -68,8 +68,8 @@ function loadState() {
     inventory: defaultInventory,
     users: defaultUsers,
     refillList: [
-      { sku: 'milk', name: 'Milk', quantity: 2, department: 'Dairy', location: 'Aisle 1', employee: 'Maria Gomez' },
-      { sku: 'juice', name: 'Juice', quantity: 3, department: 'Beverages', location: 'Aisle 5', employee: 'Maria Gomez' },
+      { upc: '000123456789', description: 'Milk', quantity: 2, location: 'Aisle 1' },
+      { upc: '000654321987', description: 'Juice', quantity: 3, location: 'Aisle 5' },
     ],
     orders: [
       {
@@ -78,9 +78,8 @@ function loadState() {
         location: 'Downtown Store',
         createdAt: '2026-09-02 08:30',
         status: 'Submitted',
-        department: 'Dairy',
         items: [
-          { sku: 'milk', name: 'Milk', requested: 2, picked: 2, unavailable: 0, reason: '', substitute: '' },
+          { upc: '000123456789', description: 'Milk', requested: 2, picked: 2, unavailable: 0, reason: '', substitute: '' },
         ],
       },
     ],
@@ -102,26 +101,24 @@ function saveState() {
 
 function findInventoryItemByBarcode(value) {
   const query = value.trim().toLowerCase();
-  return state.inventory.find((item) => item.upc === query || item.sku.toLowerCase() === query || item.itemNumber.toLowerCase() === query);
+  return state.inventory.find((item) => item.upc === query);
 }
 
 function updateItemDetails(item) {
   if (!item) {
-    itemFields.name.textContent = '-';
+    itemFields.description.textContent = '-';
     itemFields.upc.textContent = '-';
-    itemFields.number.textContent = '-';
-    itemFields.department.textContent = '-';
     itemFields.location.textContent = '-';
-    itemFields.caseQty.textContent = '-';
+    itemFields.onHand.textContent = '-';
+    itemFields.safetyStock.textContent = '-';
     return;
   }
 
-  itemFields.name.textContent = item.sku;
+  itemFields.description.textContent = item.description;
   itemFields.upc.textContent = item.upc;
-  itemFields.number.textContent = item.itemNumber;
-  itemFields.department.textContent = item.department;
-  itemFields.location.textContent = item.location;
-  itemFields.caseQty.textContent = item.caseQuantity;
+  itemFields.location.textContent = item.location || 'Not assigned';
+  itemFields.onHand.textContent = item.on_hand;
+  itemFields.safetyStock.textContent = item.safety_stock;
 }
 
 function renderRefillList() {
@@ -134,10 +131,10 @@ function renderRefillList() {
   list.innerHTML = state.refillList.map((item, index) => `
     <div class="list-item">
       <div class="order-meta">
-        <strong>${item.name}</strong>
+        <strong>${item.description}</strong>
         <button class="danger" data-remove-item="${index}" type="button">Remove</button>
       </div>
-      <div>Qty: ${item.quantity} · Dept: ${item.department} · Location: ${item.location}</div>
+      <div>Qty: ${item.quantity} cases · UPC: ${item.upc} · Location: ${item.location || 'Not assigned'}</div>
     </div>
   `).join('');
 
@@ -161,7 +158,7 @@ function renderOrders() {
       </div>
       <div>Requested by: ${order.employee}</div>
       <div>Created: ${order.createdAt}</div>
-      <div>Items: ${order.items.map((item) => `${item.name} (${item.requested})`).join(', ')}</div>
+      <div>Items: ${order.items.map((item) => `${item.description || item.name || 'Item'} (${item.requested})`).join(', ')}</div>
     </div>
   `).join('');
 
@@ -178,7 +175,7 @@ function renderWarehouseOrders() {
       <div class="order-total">Complete order · ${order.items.length} items</div>
       <div>Enter the cases picked for every item, then accept once.</div>
       <ul>
-        ${order.items.map((item, index) => `<li>${item.name}: requested ${item.requested} cases <input class="picked-input" data-order-id="${order.id}" data-item-index="${index}" type="number" min="0" value="${item.picked || 0}" /></li>`).join('')}
+        ${order.items.map((item, index) => `<li>${item.description || item.name || 'Item'}: requested ${item.requested} cases <input class="picked-input" data-order-id="${order.id}" data-item-index="${index}" type="number" min="0" value="${item.picked || 0}" /></li>`).join('')}
       </ul>
       <div class="button-row">
         <button class="primary" data-accept-order="${order.id}" type="button">Accept complete order</button>
@@ -205,7 +202,7 @@ function renderWarehouseOrders() {
         order.status = hasZero ? 'Out of Stock' : 'Accepted by Warehouse';
         if (hasZero) {
           order.items.filter((item) => Number(item.picked) === 0).forEach((item) => {
-            state.alerts.push({ item: item.name, upc: item.sku, requested: item.requested, fulfilled: 0, store: 'Store replenishment', warehouse: 'North Warehouse', date: new Date().toISOString().slice(0, 10), processedBy: 'Warehouse', reason: 'No cases available' });
+            state.alerts.push({ item: item.description, upc: item.upc, requested: item.requested, fulfilled: 0, store: 'Store replenishment', warehouse: 'North Warehouse', date: new Date().toISOString().slice(0, 10), processedBy: 'Warehouse', reason: 'No cases available' });
           });
         }
         addNotification(`Warehouse accepted ${order.id}`);
@@ -302,32 +299,20 @@ function normalizeInventoryRow(row) {
     return Number.isFinite(value) ? value : fallback;
   };
 
-  const sku = textValue(valueFor('sku', 'item', 'itemname', 'product', 'productname', 'description', 'name'));
-  const itemNumber = textValue(valueFor('itemnumber', 'itemno', 'itemnumber', 'itemid', 'productid', 'number') || '');
+  const description = textValue(valueFor('description', 'item', 'itemname', 'product', 'productname', 'name'));
   const upc = textValue(valueFor('upc', 'barcode', 'ean', 'gtin') || '');
-  const department = textValue(valueFor('department', 'category', 'section', 'division') || 'General');
-  const location = textValue(valueFor('location', 'aisle', 'shelf', 'shelfaddress', 'bin') || 'Main Floor');
-  const caseQuantity = numberFor(1, 'casequantity', 'caseqty', 'casepack', 'packsize', 'unitspercase');
+  const location = textValue(valueFor('location', 'aisle', 'shelf', 'shelfaddress', 'bin') || '');
   const onHand = numberFor(0, 'onhand', 'quantity', 'qty', 'stock', 'currentstock', 'available');
   const safetyStock = numberFor(0, 'safetystock', 'safety', 'minimumstock', 'minstock');
-  const reorderPoint = numberFor(0, 'reorderpoint', 'reorder', 'reorderlevel', 'parlevel', 'targetstock');
-  const reorderQuantity = numberFor(1, 'reorderquantity', 'reorderqty', 'orderquantity', 'orderqty', 'suggestedorder');
 
-  if (!sku && !upc && !itemNumber) return null;
-
-  const normalizedSku = sku || `ITEM-${(upc || itemNumber || 'new').replace(/\s+/g, '-')}`;
+  if (!description && !upc) return null;
 
   const item = {
-    sku: normalizedSku,
-    upc: upc || `${normalizedSku}-upc`,
-    itemNumber: itemNumber || normalizedSku,
-    department,
+    description: description || 'Unnamed item',
+    upc,
     location,
-    caseQuantity: caseQuantity > 0 ? caseQuantity : 1,
     on_hand: onHand >= 0 ? onHand : 0,
     safety_stock: safetyStock >= 0 ? safetyStock : 0,
-    reorder_point: reorderPoint >= 0 ? reorderPoint : 0,
-    reorder_quantity: reorderQuantity > 0 ? reorderQuantity : 1,
   };
 
   Object.entries(row).forEach(([key, value]) => {
@@ -339,7 +324,7 @@ function normalizeInventoryRow(row) {
 function mergeInventory(existing, imported) {
   const next = [...existing];
   imported.forEach((item) => {
-    const matchIndex = next.findIndex((current) => current.sku === item.sku || current.upc === item.upc || current.itemNumber === item.itemNumber);
+    const matchIndex = next.findIndex((current) => current.upc === item.upc);
     if (matchIndex >= 0) {
       next[matchIndex] = { ...next[matchIndex], ...item };
     } else {
@@ -397,8 +382,8 @@ function importInventoryFromFile(file) {
 }
 
 function downloadInventoryTemplate() {
-  const columns = ['sku', 'upc', 'itemNumber', 'department', 'location', 'caseQuantity', 'on_hand', 'safety_stock', 'reorder_point', 'reorder_quantity'];
-  const example = ['example-item', '000000000000', 'ITEM-001', 'Grocery', 'Aisle 1', 12, 4, 6, 10, 8];
+  const columns = ['description', 'upc', 'location', 'on_hand', 'safety_stock'];
+  const example = ['Example item', '000000000000', 'Aisle 1', 4, 6];
   if (typeof XLSX === 'undefined') {
     const csv = `${columns.join(',')}\n${example.join(',')}\n`;
     const link = document.createElement('a');
@@ -421,7 +406,7 @@ function renderNotifications() {
 }
 
 function renderDashboard() {
-  const lowStock = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point).length;
+  const lowStock = state.inventory.filter((item) => item.on_hand <= item.safety_stock).length;
   const outOfStock = state.alerts.length;
   const openOrders = state.orders.filter((order) => !['Done', 'Out of Stock', 'Cancelled'].includes(order.status)).length;
 
@@ -432,9 +417,9 @@ function renderDashboard() {
   document.getElementById('inventory-item-count').textContent = `${state.inventory.length} items`;
   document.getElementById('replenishment-task-count').textContent = `${lowStock} tasks`;
 
-  const urgent = state.inventory.filter((item) => item.on_hand + item.safety_stock <= item.reorder_point);
+  const urgent = state.inventory.filter((item) => item.on_hand <= item.safety_stock);
   lowStockList.innerHTML = urgent.length
-    ? urgent.map((item) => `<div class="list-item"><strong>${item.sku}</strong> · ${item.department} · reorder qty ${item.reorder_quantity}</div>`).join('')
+    ? urgent.map((item) => `<div class="list-item"><strong>${item.description}</strong> · UPC ${item.upc} · on hand ${item.on_hand}</div>`).join('')
     : '<div class="list-item empty">No urgent stock issues.</div>';
 
   renderNotifications();
@@ -460,7 +445,7 @@ function getStatusClass(status) {
 
 function showQuantityModal(item) {
   pendingScannedItem = item;
-  quantityItemName.textContent = `${item.sku} · ${item.department}`;
+  quantityItemName.textContent = `${item.description} · UPC ${item.upc}`;
   quantityInput.value = '1';
   quantityModal.hidden = false;
   quantityInput.focus();
@@ -468,17 +453,16 @@ function showQuantityModal(item) {
 
 function addScannedItem(item, quantity) {
   state.refillList.push({
-    sku: item.sku,
-    name: item.sku,
+    upc: item.upc,
+    description: item.description,
     quantity,
-    department: item.department,
     location: item.location,
     employee: 'Current employee',
   });
 
   saveState();
   renderRefillList();
-  addNotification(`${item.sku} added to shelf refill list`);
+  addNotification(`${item.description} added to shelf refill list`);
   quantityModal.hidden = true;
 }
 
@@ -545,10 +529,9 @@ createOrderBtn.addEventListener('click', () => {
     location: 'Store replenishment',
     createdAt: new Date().toLocaleString(),
     status: 'Submitted',
-    department: state.refillList[0].department || 'General',
     items: state.refillList.map((entry) => ({
-      sku: entry.sku,
-      name: entry.name,
+      upc: entry.upc,
+      description: entry.description,
       requested: entry.quantity,
       picked: 0,
       unavailable: 0,
