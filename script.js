@@ -28,8 +28,16 @@ function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved) {
-      const users = saved.users?.length ? saved.users : [...defaultUsers];
-      if (!users.some((user) => user.role === 'admin')) users.push(defaultUsers.find((user) => user.role === 'admin'));
+      const users = (saved.users?.length ? saved.users : [...defaultUsers]).map((user) => ({
+        name: String(user.name || '').trim().toLowerCase(),
+        password: String(user.password || ''),
+        role: String(user.role || 'employee').trim().toLowerCase(),
+        aisle: String(user.aisle || 'Not assigned'),
+      })).filter((user) => user.name);
+      const defaultAdmin = defaultUsers.find((user) => user.role === 'admin');
+      const admin = users.find((user) => user.name === defaultAdmin.name);
+      if (!admin) users.push({ ...defaultAdmin });
+      else if (!admin.password) Object.assign(admin, defaultAdmin);
       return { ...saved, inventory: saved.inventory?.length ? saved.inventory : defaultInventory, users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
     }
   } catch (error) { console.warn('Saved state could not be loaded', error); }
@@ -109,7 +117,7 @@ function importInventory(file) { if (!file) { $('import-status').textContent = '
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'stockflow-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'stockflow-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
 document.querySelectorAll('[data-view]').forEach((element) => element.addEventListener('click', () => setView(element.dataset.view)));
-$('login-form').addEventListener('submit', (event) => { event.preventDefault(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => entry.name.toLowerCase() === username && entry.password === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; $('login-status').textContent = ''; save(); render(); });
+$('login-form').addEventListener('submit', (event) => { event.preventDefault(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => String(entry.name).toLowerCase() === username && entry.password === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; $('login-status').textContent = ''; save(); render(); });
 $('logout-btn').addEventListener('click', () => { currentUser = null; currentView = 'home'; $('login-form').reset(); render(); });
 $('scan-btn').addEventListener('click', openCamera); $('manual-lookup-btn').addEventListener('click', () => handleBarcode($('scan-input').value)); $('close-camera-btn').addEventListener('click', closeCamera); $('cancel-quantity-btn').addEventListener('click', () => { $('quantity-modal').hidden = true; }); $('confirm-quantity-btn').addEventListener('click', addScannedItem); $('create-order-btn').addEventListener('click', createOrder); $('order-search').addEventListener('input', renderOrders); $('manager-search').addEventListener('input', renderManager); $('inventory-upload').addEventListener('change', (event) => importInventory(event.target.files[0])); $('import-inventory-btn').addEventListener('click', () => importInventory($('inventory-upload').files[0])); $('download-template-btn').addEventListener('click', downloadTemplate);
 $('user-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('user-name').value.trim(); const password = $('user-password').value; const role = $('user-role').value; const aisle = $('user-aisle').value.trim(); if (!name || !password || !role || !aisle) return; state.users.push({ name, password, role, aisle }); event.target.reset(); notify(`${name} account added`); render(); });
