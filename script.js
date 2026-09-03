@@ -8,9 +8,9 @@ const defaultInventory = [
 ];
 
 const defaultUsers = [
-  { name: 'maria', password: 'worker123', role: 'employee' },
-  { name: 'jamal', password: 'warehouse123', role: 'warehouse' },
-  { name: 'anita', password: 'manager123', role: 'manager' },
+  { name: 'maria', password: 'worker123', role: 'employee', aisle: 'Aisle 1' },
+  { name: 'jamal', password: 'warehouse123', role: 'warehouse', aisle: 'Receiving' },
+  { name: 'anita', password: 'manager123', role: 'manager', aisle: 'All aisles' },
 ];
 
 const state = loadState();
@@ -56,6 +56,7 @@ function loadState() {
         name: user.name,
         password: user.password || '',
         role: user.role === 'Store Worker' ? 'employee' : user.role === 'Warehouse Picker' ? 'warehouse' : (user.role || 'employee').toLowerCase(),
+        aisle: user.aisle || 'Not assigned',
       }));
       return saved;
     }
@@ -252,11 +253,35 @@ function renderUsers() {
       <div>
         <strong>${user.name}</strong><br />
         <span>${user.role}</span><br />
-        <small>Username login enabled</small>
+        <small>Aisle: ${user.aisle || 'Not assigned'}</small>
       </div>
-      <span class="status-badge success">Active</span>
+      <div class="user-actions"><span class="status-badge success">${user.role}</span><button data-edit-user="${user.name}" type="button">Edit</button><button class="danger" data-delete-user="${user.name}" type="button">Delete</button></div>
     </div>
   `).join('');
+
+  usersList.querySelectorAll('[data-edit-user]').forEach((button) => {
+    button.addEventListener('click', () => {
+      const user = state.users.find((entry) => entry.name === button.dataset.editUser);
+      if (!user) return;
+      const name = prompt('Username', user.name)?.trim();
+      const aisle = prompt('Aisle', user.aisle || '')?.trim();
+      if (name && aisle) {
+        user.name = name;
+        user.aisle = aisle;
+        saveState();
+        renderUsers();
+      }
+    });
+  });
+
+  usersList.querySelectorAll('[data-delete-user]').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.users = state.users.filter((user) => user.name !== button.dataset.deleteUser);
+      saveState();
+      renderUsers();
+      renderDashboard();
+    });
+  });
 }
 
 function setImportStatus(message, isError = false) {
@@ -339,6 +364,7 @@ function importInventoryFromFile(file) {
   const reader = new FileReader();
   reader.onload = (event) => {
     try {
+      if (typeof XLSX === 'undefined') throw new Error('Excel parser bundle is unavailable');
       const arrayBuffer = event.target.result;
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -373,6 +399,16 @@ function importInventoryFromFile(file) {
 function downloadInventoryTemplate() {
   const columns = ['sku', 'upc', 'itemNumber', 'department', 'location', 'caseQuantity', 'on_hand', 'safety_stock', 'reorder_point', 'reorder_quantity'];
   const example = ['example-item', '000000000000', 'ITEM-001', 'Grocery', 'Aisle 1', 12, 4, 6, 10, 8];
+  if (typeof XLSX === 'undefined') {
+    const csv = `${columns.join(',')}\n${example.join(',')}\n`;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    link.download = 'inventory-import-template.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+    setImportStatus('CSV inventory template downloaded.');
+    return;
+  }
   const worksheet = XLSX.utils.aoa_to_sheet([columns, example]);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Inventory');
@@ -455,7 +491,7 @@ function lookupTypedBarcode() {
 
 async function openCameraScanner() {
   cameraModal.hidden = false;
-  cameraStatus.textContent = 'Point the camera at the barcode, then press Scan barcode.';
+  cameraStatus.textContent = 'Point the camera at the barcode. Scanning automatically...';
   if (!navigator.mediaDevices?.getUserMedia) {
     cameraStatus.textContent = 'Camera access is not available. Enter the barcode below instead.';
     return;
@@ -463,6 +499,7 @@ async function openCameraScanner() {
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
     cameraVideo.srcObject = cameraStream;
+    requestAnimationFrame(scanCameraBarcode);
   } catch (error) {
     cameraStatus.textContent = 'Camera access was blocked. Enter the barcode below instead.';
   }
@@ -483,7 +520,7 @@ async function scanCameraBarcode() {
   const detector = new BarcodeDetector();
   const codes = await detector.detect(cameraVideo);
   if (!codes.length) {
-    cameraStatus.textContent = 'No barcode found yet. Center the barcode and try again.';
+    if (!cameraModal.hidden) requestAnimationFrame(scanCameraBarcode);
     return;
   }
   scanInput.value = codes[0].rawValue;
@@ -522,7 +559,7 @@ createOrderBtn.addEventListener('click', () => {
 
   state.orders.unshift(order);
   state.refillList = [];
-  state.notifications.unshift(`New refill order ${orderId} submitted by ${employee}`);
+  state.notifications.unshift(`New refill order ${orderId} submitted by Current employee`);
   saveState();
   renderRefillList();
   renderOrders();
@@ -534,12 +571,13 @@ createOrderBtn.addEventListener('click', () => {
 userForm.addEventListener('submit', (event) => {
   event.preventDefault();
   const name = document.getElementById('user-name').value.trim();
+  const aisle = document.getElementById('user-aisle').value.trim();
   const role = document.getElementById('user-role').value.trim();
   const password = document.getElementById('user-password').value;
 
-  if (!name || !role || !password) return;
+  if (!name || !aisle || !role || !password) return;
 
-  state.users.push({ name, role, password });
+  state.users.push({ name, role, password, aisle });
   saveState();
   userForm.reset();
   renderUsers();
@@ -563,7 +601,6 @@ downloadTemplateBtn.addEventListener('click', downloadInventoryTemplate);
 scanBtn.addEventListener('click', openCameraScanner);
 manualLookupBtn.addEventListener('click', lookupTypedBarcode);
 document.getElementById('close-camera-btn').addEventListener('click', closeCameraScanner);
-document.getElementById('camera-capture-btn').addEventListener('click', scanCameraBarcode);
 document.getElementById('cancel-quantity-btn').addEventListener('click', () => { quantityModal.hidden = true; });
 document.getElementById('confirm-quantity-btn').addEventListener('click', () => {
   if (pendingScannedItem) addScannedItem(pendingScannedItem, Math.max(1, Number(quantityInput.value) || 1));
