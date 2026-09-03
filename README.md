@@ -31,7 +31,13 @@ python -m http.server 8080
 
 Open `http://localhost:8080`. Use the current-user selector to exercise the store, warehouse, delivery, manager, and admin workflows. The app supports local camera barcode scanning through the bundled ZXing decoder, with typed UPC lookup as a fallback.
 
-The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, so the static app works after a direct GitHub or Netlify import without a build step. Inventory templates use `Code`, `Desc`, `Brand`, and `Size`; `Code` is treated as a UPC text value so leading zeros are preserved.
+The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, and the barcode decoder is bundled in `vendor/zxing-browser.js`, so the static app works after a direct GitHub or Netlify import without a build step. Inventory templates use `Code`, `Desc`, `Brand`, and `Size`; `Code` is treated as a UPC text value so leading zeros are preserved.
+
+## Netlify deployment
+
+Import the GitHub repository with the project root as the publish directory. Netlify reads `netlify.toml`, runs the lightweight build check, publishes the root folder, and uses the root `index.html` entry point.
+
+The configured build check is `npm run build`; it validates the browser controller before publishing. Run `npm test` locally for the Python replenishment tests.
 
 ## Usage
 
