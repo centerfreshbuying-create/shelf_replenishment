@@ -3,229 +3,52 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Supermarket Shelf Replenishment</title>
+    <title>StockFlow | Shelf replenishment</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div class="app-shell">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">North Warehouse · Shift 1</p>
-          <h1>StockFlow</h1>
-        </div>
-
-        <nav class="topnav" aria-label="Main navigation">
-          <button class="tab active" data-tab="dashboard" type="button">Dashboard</button>
-          <button class="tab" data-tab="scan" type="button">Shelf Scan</button>
-          <button class="tab" data-tab="orders" type="button">Orders</button>
-          <button class="tab" data-tab="warehouse" type="button">Warehouse</button>
-          <button class="tab" data-tab="admin" type="button">Admin</button>
-        </nav>
+        <div class="brand"><span class="brand-mark">SF</span><div><p class="eyebrow">Warehouse operations</p><h1>StockFlow</h1></div></div>
+        <div class="session"><span class="live-dot"></span><span id="sync-status">Local sync on</span><select id="user-switch" aria-label="Current user"></select></div>
       </header>
+      <nav class="main-nav" aria-label="Application navigation">
+        <button class="nav-tab active" data-view="home" type="button">Home</button>
+        <button class="nav-tab" data-view="scan" type="button">Scan & order</button>
+        <button class="nav-tab" data-view="orders" type="button">Orders</button>
+        <button class="nav-tab" data-view="warehouse" type="button">Warehouse</button>
+        <button class="nav-tab" data-view="delivery" type="button">Delivery</button>
+        <button class="nav-tab" data-view="manager" type="button">Manager</button>
+        <button class="nav-tab" data-view="admin" type="button">Admin</button>
+      </nav>
 
-      <main class="content">
-        <section id="dashboard" class="tab-panel active">
-          <div class="worker-hero">
-            <div>
-              <p class="eyebrow">Good morning, Maria</p>
-              <h2>What are you working on?</h2>
-              <p class="hero-copy">Choose a task to start. Your progress saves automatically.</p>
-            </div>
-            <div class="shift-status"><span class="live-dot"></span> On shift <strong>05:27 PM</strong></div>
+      <main>
+        <section id="home-view" class="view active">
+          <div class="hero"><div><p class="eyebrow">Tuesday, September 3 · North Warehouse</p><h2>Ready for the next task?</h2><p>Fast, focused work for the floor team.</p></div><button class="primary hero-action" data-view="scan" type="button">Start a shelf request</button></div>
+          <div class="work-grid">
+            <button class="work-tile green" data-view="scan" type="button"><span class="tile-icon">SCAN</span><strong>Scan & request</strong><small>Scan a shelf label and build one refill order.</small><span class="tile-count" id="home-refill-count">0 items</span></button>
+            <button class="work-tile blue" data-view="warehouse" type="button"><span class="tile-icon">PICK</span><strong>Pick orders</strong><small>Accept a complete order and record every case.</small><span class="tile-count" id="home-order-count">0 waiting</span></button>
+            <button class="work-tile sand" data-view="manager" type="button"><span class="tile-icon">VIEW</span><strong>Manager view</strong><small>See stock, delays, alerts, and performance.</small><span class="tile-count" id="home-alert-count">0 alerts</span></button>
           </div>
-
-          <div class="work-grid" aria-label="Warehouse work areas">
-            <button class="work-tile inbound" data-tab="warehouse" type="button">
-              <span class="tile-icon">IN</span>
-              <span class="tile-label">Inbound</span>
-              <small>Receive and put away</small>
-              <strong class="tile-count">3 tasks</strong>
-            </button>
-            <button class="work-tile outbound" data-tab="orders" type="button">
-              <span class="tile-icon">OUT</span>
-              <span class="tile-label">Outbound</span>
-              <small>Pick store orders</small>
-              <strong class="tile-count">2 ready</strong>
-            </button>
-            <button class="work-tile inventory" data-tab="scan" type="button">
-              <span class="tile-icon">INV</span>
-              <span class="tile-label">Inventory</span>
-              <small>Count and locate items</small>
-              <strong class="tile-count" id="inventory-item-count">0 items</strong>
-            </button>
-            <button class="work-tile replenishment" data-tab="scan" type="button">
-              <span class="tile-icon">REP</span>
-              <span class="tile-label">Replenishment</span>
-              <small>Restock store shelves</small>
-              <strong class="tile-count" id="replenishment-task-count">0 tasks</strong>
-            </button>
-          </div>
-
-          <div class="quick-actions">
-            <button class="quick-action" data-tab="scan" type="button"><span>SCAN</span> Scan an item</button>
-            <button class="quick-action" data-tab="orders" type="button"><span>ORDERS</span> View my orders</button>
-            <button class="quick-action" data-tab="admin" type="button"><span>FILE</span> Import inventory</button>
-          </div>
-
-          <div class="stats-grid">
-            <article class="stat-card">
-              <span>Open orders</span>
-              <strong id="open-orders">0</strong>
-            </article>
-            <article class="stat-card warning">
-              <span>Low stock items</span>
-              <strong id="low-stock-count">0</strong>
-            </article>
-            <article class="stat-card success">
-              <span>Out-of-stock alerts</span>
-              <strong id="out-of-stock-count">0</strong>
-            </article>
-            <article class="stat-card info">
-              <span>Active users</span>
-              <strong id="active-users">0</strong>
-            </article>
-          </div>
-
-          <div class="panel-grid">
-            <div class="panel-box">
-              <div class="panel-header">
-                <div><p class="eyebrow">Next actions</p><h2>Urgent refill list</h2></div>
-                <button class="text-button" data-tab="scan" type="button">View all</button>
-              </div>
-              <div id="low-stock-list" class="list-box"></div>
-            </div>
-
-            <div class="panel-box">
-              <div class="panel-header">
-                <div><p class="eyebrow">Live updates</p><h2>Recent notifications</h2></div>
-                <span class="status-badge success">Synced</span>
-              </div>
-              <div id="notification-list" class="list-box"></div>
-            </div>
-          </div>
+          <div class="stats-grid"><article class="stat-card"><span>Open orders</span><strong id="stat-open">0</strong></article><article class="stat-card warning"><span>Low stock</span><strong id="stat-low">0</strong></article><article class="stat-card danger"><span>Out of stock</span><strong id="stat-out">0</strong></article><article class="stat-card success"><span>Completed today</span><strong id="stat-done">0</strong></article></div>
+          <div class="two-column"><article class="panel"><div class="panel-heading"><div><p class="eyebrow">Next actions</p><h3>Priority queue</h3></div><button class="link-button" data-view="orders" type="button">All orders</button></div><div id="home-queue" class="stack"></div></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">Activity</p><h3>Recent updates</h3></div><span class="status success">Live</span></div><div id="home-activity" class="stack"></div></article></div>
         </section>
 
-        <section id="scan" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Shelf scanning</h2>
-            </div>
-
-            <div class="scan-grid">
-              <div class="scan-form">
-                <label>
-                  Item barcode
-                  <input id="scan-input" type="text" placeholder="Use camera or enter barcode" />
-                </label>
-                <button id="scan-btn" class="primary" type="button">Open camera to scan</button>
-                <button id="manual-lookup-btn" type="button">Look up typed barcode</button>
-              </div>
-
-              <div class="item-card" id="item-details">
-                <h3>Item details</h3>
-                <p><strong>Description:</strong> <span id="item-description">-</span></p>
-                <p><strong>UPC:</strong> <span id="item-upc">-</span></p>
-                <p><strong>Location:</strong> <span id="item-location">-</span></p>
-                <p><strong>On hand:</strong> <span id="item-on-hand">-</span></p>
-                <p><strong>Safety stock:</strong> <span id="item-safety-stock">-</span></p>
-              </div>
-            </div>
-
-            <div class="panel-header subheader">
-              <h3>Refill list</h3>
-            </div>
-            <div id="refill-list" class="list-box"></div>
-
-            <button id="create-order-btn" class="primary" type="button">Send complete order</button>
-          </div>
+        <section id="scan-view" class="view">
+          <div class="page-heading"><div><p class="eyebrow">Store workflow</p><h2>Scan & build order</h2><p>Scan each shelf label, enter cases, and submit everything together.</p></div><span class="step-pill">1 · Request</span></div>
+          <div class="two-column scan-layout"><article class="panel scan-panel"><div class="scan-box"><span class="scan-symbol">UPC</span><h3>Scan a shelf label</h3><p id="scan-status">Camera scans automatically when opened.</p><input id="scan-input" type="text" inputmode="numeric" placeholder="UPC barcode" aria-label="UPC barcode" /><div class="button-row"><button id="scan-btn" class="primary" type="button">Open camera</button><button id="manual-lookup-btn" type="button">Use typed UPC</button></div></div><div id="item-details" class="item-details empty-state">Scan an item to see its description and UPC.</div></article><article class="panel"><div class="panel-heading"><div><p class="eyebrow">Draft order</p><h3>Refill shopping list</h3></div><span class="status" id="draft-count">0 items</span></div><div id="refill-list" class="stack"></div><button id="create-order-btn" class="primary full-button" type="button">Create order</button></article></div>
         </section>
 
-        <section id="orders" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Submitted orders</h2>
-            </div>
-            <div id="orders-list" class="order-list"></div>
-          </div>
-        </section>
-
-        <section id="warehouse" class="tab-panel">
-          <div class="panel-box">
-            <div class="panel-header">
-              <h2>Warehouse picking</h2>
-            </div>
-            <div id="warehouse-orders" class="order-list"></div>
-          </div>
-        </section>
-
-        <section id="admin" class="tab-panel">
-          <div class="panel-grid">
-            <div class="panel-box">
-              <div class="panel-header">
-                <h2>User roles</h2>
-              </div>
-              <form id="user-form" class="user-form">
-                <input id="user-name" type="text" placeholder="Username" required />
-                <input id="user-aisle" type="text" placeholder="Aisle" required />
-                <input id="user-password" type="password" placeholder="Password" required />
-                <select id="user-role" required>
-                  <option value="">Choose role</option>
-                  <option value="employee">Employee</option>
-                  <option value="manager">Manager</option>
-                  <option value="store">Store</option>
-                  <option value="warehouse">Warehouse</option>
-                  <option value="admin">Admin</option>
-                </select>
-                <button type="submit" class="primary">Add account</button>
-              </form>
-
-              <div class="subheader">
-                <h3>Inventory import</h3>
-              </div>
-              <div class="scan-form" style="margin-top: 12px;">
-                <label>
-                  Upload Excel file with all items
-                  <input id="inventory-upload" type="file" accept=".xlsx,.xls,.csv" />
-                </label>
-                <div class="button-row">
-                  <button id="import-inventory-btn" class="primary" type="button">Import inventory sheet</button>
-                  <button id="download-template-btn" type="button">Download template</button>
-                </div>
-                <p id="import-status" class="empty" style="margin: 10px 0 0;">No inventory file uploaded yet.</p>
-              </div>
-
-              <div id="users-list" class="list-box"></div>
-            </div>
-
-            <div class="panel-box">
-              <div class="panel-header">
-                <h2>Out-of-stock alerts</h2>
-              </div>
-              <div id="out-of-stock-list" class="list-box"></div>
-            </div>
-          </div>
-        </section>
+        <section id="orders-view" class="view"><div class="page-heading"><div><p class="eyebrow">Store requests</p><h2>Order history</h2><p>Every request, status change, and timestamp stays in one place.</p></div><input id="order-search" class="search" type="search" placeholder="Search order or item" /></div><div id="orders-list" class="stack"></div></section>
+        <section id="warehouse-view" class="view"><div class="page-heading"><div><p class="eyebrow">Warehouse workflow</p><h2>Pick complete orders</h2><p>Accept one order, scan each product, record picked cases, then finish.</p></div><span class="step-pill">2 · Pick</span></div><div id="warehouse-orders" class="stack"></div></section>
+        <section id="delivery-view" class="view"><div class="page-heading"><div><p class="eyebrow">Store floor workflow</p><h2>Move orders to the shelf</h2><p>Confirm each handoff so the final shelf scan closes the loop.</p></div><span class="step-pill">3 · Stock</span></div><div id="delivery-orders" class="stack"></div></section>
+        <section id="manager-view" class="view"><div class="page-heading"><div><p class="eyebrow">Operations overview</p><h2>Manager dashboard</h2><p>Monitor service level, exceptions, inventory, and team activity.</p></div><input id="manager-search" class="search" type="search" placeholder="Search inventory or UPC" /></div><div class="stats-grid manager-stats"><article class="stat-card"><span>Waiting warehouse</span><strong id="manager-waiting">0</strong></article><article class="stat-card success"><span>Fulfilled orders</span><strong id="manager-fulfilled">0</strong></article><article class="stat-card danger"><span>Active alerts</span><strong id="manager-alerts">0</strong></article><article class="stat-card warning"><span>Avg. pick time</span><strong id="manager-pick-time">0m</strong></article></div><div class="two-column"><article class="panel"><div class="panel-heading"><h3>Inventory</h3><span class="status">Live records</span></div><div id="manager-inventory" class="stack"></div></article><article class="panel"><div class="panel-heading"><h3>Out-of-stock alerts</h3><span class="status danger">Needs attention</span></div><div id="alerts-list" class="stack"></div></article></div></section>
+        <section id="admin-view" class="view"><div class="page-heading"><div><p class="eyebrow">System settings</p><h2>People & inventory</h2><p>Manage role-based accounts and import the item master.</p></div></div><div class="two-column"><article class="panel"><div class="panel-heading"><h3>Add employee account</h3></div><form id="user-form" class="form-grid"><input id="user-name" placeholder="Username" required /><input id="user-password" type="password" placeholder="Password" required /><input id="user-aisle" placeholder="Aisle" required /><select id="user-role" required><option value="">Role</option><option value="employee">Employee</option><option value="manager">Manager</option><option value="store">Store</option><option value="warehouse">Warehouse</option><option value="delivery">Delivery</option><option value="admin">Admin</option></select><button class="primary" type="submit">Add account</button></form><div id="users-list" class="stack"></div></article><article class="panel"><div class="panel-heading"><h3>Import item master</h3></div><p class="helper">Required Excel columns: <strong>Code, Desc, Brand, Size</strong>. Code is stored as the UPC and leading zeros are preserved.</p><input id="inventory-upload" type="file" accept=".xlsx,.xls,.csv" /><div class="button-row"><button id="import-inventory-btn" class="primary" type="button">Import Excel</button><button id="download-template-btn" type="button">Download template</button></div><p id="import-status" class="helper">No file imported yet.</p></article></div></section>
       </main>
     </div>
 
-    <div id="camera-modal" class="modal" hidden>
-      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="camera-title">
-        <div class="modal-header"><div><p class="eyebrow">Barcode scanner</p><h2 id="camera-title">Point at an item barcode</h2></div><button id="close-camera-btn" type="button" aria-label="Close camera">Close</button></div>
-        <video id="camera-video" autoplay playsinline></video>
-        <p id="camera-status" class="empty">Starting camera...</p>
-      </div>
-    </div>
-
-    <div id="quantity-modal" class="modal" hidden>
-      <div class="modal-card quantity-card" role="dialog" aria-modal="true" aria-labelledby="quantity-title">
-        <p class="eyebrow">Item found</p><h2 id="quantity-title">How many cases?</h2>
-        <p id="quantity-item-name"></p>
-        <input id="quantity-input" type="number" min="1" value="1" inputmode="numeric" />
-        <div class="button-row"><button id="cancel-quantity-btn" type="button">Cancel</button><button id="confirm-quantity-btn" class="primary" type="button">Add item</button></div>
-      </div>
-    </div>
-
-    <script src="./vendor/xlsx.full.min.js"></script>
-    <script src="script.js"></script>
+    <div id="camera-modal" class="modal" hidden><div class="modal-card"><div class="modal-heading"><div><p class="eyebrow">Live camera</p><h2>Center the UPC barcode</h2></div><button id="close-camera-btn" type="button">Close</button></div><video id="camera-video" autoplay playsinline></video><p id="camera-status" class="helper">Scanning automatically...</p></div></div>
+    <div id="quantity-modal" class="modal" hidden><div class="modal-card quantity-card"><p class="eyebrow">Item found</p><h2 id="quantity-title">How many cases?</h2><p id="quantity-item-name"></p><input id="quantity-input" type="number" min="1" value="1" inputmode="numeric" /><div class="button-row"><button id="cancel-quantity-btn" type="button">Cancel</button><button id="confirm-quantity-btn" class="primary" type="button">Add to order</button></div></div></div>
+    <script src="./vendor/xlsx.full.min.js"></script><script src="./vendor/zxing-browser.js"></script><script src="script.js"></script>
   </body>
 </html>

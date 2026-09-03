@@ -1,6 +1,6 @@
-# Shelf Replenishment
+# StockFlow Shelf Replenishment
 
-A local-first supermarket shelf replenishment dashboard with a Python replenishment engine and browser-based operations workflow.
+A local-first supermarket shelf replenishment and warehouse picking app. The browser workflow is static, mobile-friendly, and persists demo data in local storage.
 
 ## Features
 
@@ -16,6 +16,10 @@ A local-first supermarket shelf replenishment dashboard with a Python replenishm
 - Use Dashboard, Shelf Scan, Orders, Warehouse, Delivery, and Admin options
 - Import all inventory items from `.xlsx`, `.xls`, or `.csv` files
 - Download an inventory import template with all supported replenishment fields
+- Create one complete refill order from multiple shelf scans
+- Record warehouse acceptance, picked cases, fulfillment exceptions, delivery handoffs, and shelf stocking
+- Track order timestamps, activity history, employee roles, aisles, and out-of-stock alerts
+- Search order history and inventory records
 
 ## Browser dashboard
 
@@ -25,9 +29,9 @@ Run the static app from the project folder:
 python -m http.server 8080
 ```
 
-Open `http://localhost:8080` and use **Admin > Inventory import**. The importer accepts flexible names such as `Product Name`, `Item No`, `Barcode`, `Aisle`, `Current Stock`, `Min Stock`, `Par Level`, and `Order Qty`. It also preserves additional columns from the spreadsheet.
+Open `http://localhost:8080`. Use the current-user selector to exercise the store, warehouse, delivery, manager, and admin workflows. The app supports local camera barcode scanning through the bundled ZXing decoder, with typed UPC lookup as a fallback.
 
-The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, so the static app works after a direct GitHub or Netlify import without a build step. Inventory templates use only `description`, `upc`, `location`, `on_hand`, and `safety_stock`; location may be blank.
+The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, so the static app works after a direct GitHub or Netlify import without a build step. Inventory templates use `Code`, `Desc`, `Brand`, and `Size`; `Code` is treated as a UPC text value so leading zeros are preserved.
 
 ## Usage
 
