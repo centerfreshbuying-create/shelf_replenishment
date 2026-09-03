@@ -15,7 +15,9 @@ const defaultUsers = [
 ];
 const state = loadState();
 let currentView = state.view || 'home';
-let currentUser = null;
+let currentUser = state.currentUser?.name
+  ? state.users.find((user) => user.name === state.currentUser.name) || null
+  : null;
 let cameraStream;
 let barcodeReader;
 let pendingItem;
