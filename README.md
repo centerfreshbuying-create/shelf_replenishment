@@ -31,7 +31,7 @@ python -m http.server 8080
 
 Open `http://localhost:8080`. Use the current-user selector to exercise the store, warehouse, delivery, manager, and admin workflows. The app supports local camera barcode scanning through the bundled ZXing decoder, with typed UPC lookup as a fallback.
 
-The login screen uses the locally stored accounts. Demo accounts are `maria / worker123` for Employee, `jamal / warehouse123` for Warehouse, and `anita / manager123` for Manager. Admins can add more accounts from the Admin page; each account's role controls its available work areas.
+The login screen uses the locally stored accounts. Demo accounts are `maria / worker123` for Employee, `jamal / warehouse123` for Warehouse, `anita / manager123` for Manager, and `admin / admin123` for Administrator. Admins can add more accounts from the Admin page; each account's role controls its available work areas.
 
 The browser Excel parser is bundled locally in `vendor/xlsx.full.min.js`, and the barcode decoder is bundled in `vendor/zxing-browser.js`, so the static app works after a direct GitHub or Netlify import without a build step. Inventory templates use `Code`, `Desc`, `Brand`, and `Size`; `Code` is treated as a UPC text value so leading zeros are preserved.
 

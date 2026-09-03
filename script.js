@@ -11,6 +11,7 @@ const defaultUsers = [
   { name: 'maria', password: 'worker123', role: 'employee', aisle: 'Aisle 1' },
   { name: 'jamal', password: 'warehouse123', role: 'warehouse', aisle: 'Receiving' },
   { name: 'anita', password: 'manager123', role: 'manager', aisle: 'All aisles' },
+  { name: 'admin', password: 'admin123', role: 'admin', aisle: 'All aisles' },
 ];
 const state = loadState();
 let currentView = state.view || 'home';
@@ -26,7 +27,11 @@ function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (character)
 function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
-    if (saved) return { ...saved, inventory: saved.inventory?.length ? saved.inventory : defaultInventory, users: saved.users?.length ? saved.users : defaultUsers, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
+    if (saved) {
+      const users = saved.users?.length ? saved.users : [...defaultUsers];
+      if (!users.some((user) => user.role === 'admin')) users.push(defaultUsers.find((user) => user.role === 'admin'));
+      return { ...saved, inventory: saved.inventory?.length ? saved.inventory : defaultInventory, users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
+    }
   } catch (error) { console.warn('Saved state could not be loaded', error); }
   return { inventory: defaultInventory, users: defaultUsers, orders: [], alerts: [], activity: ['StockFlow is ready for the floor team.'], view: 'home', currentUser: defaultUsers[0] };
 }
