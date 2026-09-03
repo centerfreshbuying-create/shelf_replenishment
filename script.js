@@ -14,7 +14,7 @@ const defaultUsers = [
 ];
 const state = loadState();
 let currentView = state.view || 'home';
-let currentUser = state.currentUser || defaultUsers[0];
+let currentUser = null;
 let cameraStream;
 let barcodeReader;
 let pendingItem;
@@ -38,10 +38,17 @@ function itemByUpc(value) { const upc = String(value || '').trim(); return state
 function lowStock(item) { return Number(item.on_hand) <= Number(item.safety_stock); }
 function statusClass(status) { return ['Fully Fulfilled', 'Ready for Delivery', 'Delivered to Store', 'Stocked on Shelf'].includes(status) ? 'success' : ['Out of Stock', 'Cancelled'].includes(status) ? 'danger' : status === 'Partially Fulfilled' ? 'warning' : ''; }
 
+const permissions = { employee: ['home', 'scan', 'orders'], store: ['home', 'scan', 'orders'], warehouse: ['home', 'orders', 'warehouse'], delivery: ['home', 'orders', 'delivery'], manager: ['home', 'orders', 'manager'], admin: ['home', 'orders', 'manager', 'admin', 'scan', 'warehouse', 'delivery'] };
+function canAccess(view) { return currentUser && permissions[currentUser.role]?.includes(view); }
+function showAuthenticatedApp() { $('login-screen').hidden = Boolean(currentUser); document.querySelector('.app-shell').hidden = !currentUser; }
 function render() {
-  renderHome(); renderScan(); renderOrders(); renderWarehouse(); renderDelivery(); renderManager(); renderUsers(); renderUserSwitch();
+  showAuthenticatedApp();
+  if (!currentUser) return;
+  renderHome(); renderScan(); renderOrders(); renderWarehouse(); renderDelivery(); renderManager(); renderUsers();
+  $('current-user').textContent = `${currentUser.name} · ${ROLE_LABELS[currentUser.role] || currentUser.role}`;
+  document.querySelectorAll('.nav-tab').forEach((button) => { button.hidden = !canAccess(button.dataset.view); });
+  if (!canAccess(currentView)) setView('home');
 }
-function renderUserSwitch() { $('user-switch').innerHTML = state.users.map((user) => `<option value="${esc(user.name)}">${esc(user.name)} · ${esc(ROLE_LABELS[user.role] || user.role)}</option>`).join(''); $('user-switch').value = currentUser.name; }
 function renderHome() {
   const open = state.orders.filter((order) => !['Done', 'Cancelled', 'Stocked on Shelf'].includes(order.status));
   const alerts = state.alerts.length;
@@ -56,13 +63,13 @@ function renderScan() {
   document.querySelectorAll('[data-remove-refill]').forEach((button) => button.addEventListener('click', () => { list.splice(Number(button.dataset.removeRefill), 1); save(); render(); }));
 }
 function orderCard(order, includeActions = false) {
-  const items = order.items.map((item) => `<li>${esc(item.description)} · ${item.requested} requested · ${item.picked || 0} picked</li>`).join('');
+  const items = order.items.map((item) => `<li><strong>${esc(item.description)}</strong> · UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)} · ${item.requested} requested · ${item.picked || 0} picked${item.location ? ` · ${esc(item.location)}` : ''}</li>`).join('');
   return `<article class="order-card"><div class="card-top"><div><strong>${esc(order.id)}</strong><small>${esc(order.employee)} · ${new Date(order.createdAt).toLocaleString()}</small></div><span class="status ${statusClass(order.status)}">${esc(order.status)}</span></div><ul>${items}</ul>${includeActions ? `<div class="button-row"><button class="primary" data-accept-order="${order.id}" type="button">Accept order</button></div>` : ''}</article>`;
 }
 function renderOrders() { const query = ($('order-search')?.value || '').toLowerCase(); $('orders-list').innerHTML = state.orders.filter((order) => JSON.stringify(order).toLowerCase().includes(query)).map((order) => orderCard(order)).join('') || '<p class="helper">No orders yet.</p>'; }
 function renderWarehouse() {
   const active = state.orders.filter((order) => !['Stocked on Shelf', 'Cancelled'].includes(order.status));
-  $('warehouse-orders').innerHTML = active.map((order) => `<article class="order-card"><div class="card-top"><div><strong>${esc(order.id)}</strong><small>${order.items.length} items · submitted ${new Date(order.createdAt).toLocaleString()}</small></div><span class="status ${statusClass(order.status)}">${esc(order.status)}</span></div><p class="helper">Enter picked cases for the complete order. Zero automatically creates an out-of-stock alert.</p><div class="pick-list">${order.items.map((item, index) => `<label>${esc(item.description)} <small>requested ${item.requested} cases</small><input class="picked-input" data-order="${order.id}" data-index="${index}" type="number" min="0" value="${item.picked || 0}" /></label>`).join('')}</div><div class="button-row"><button class="primary" data-accept-order="${order.id}" type="button">Accept complete order</button>${order.status === 'Accepted by Warehouse' ? `<button data-done-order="${order.id}" type="button">Done</button>` : ''}</div></article>`).join('') || '<p class="helper">No warehouse orders waiting.</p>';
+  $('warehouse-orders').innerHTML = active.map((order) => `<article class="order-card"><div class="card-top"><div><strong>${esc(order.id)}</strong><small>${order.items.length} items · submitted ${new Date(order.createdAt).toLocaleString()}</small></div><span class="status ${statusClass(order.status)}">${esc(order.status)}</span></div><p class="helper">Company: North Warehouse · Pick the complete order. Zero automatically creates an out-of-stock alert.</p><div class="pick-list">${order.items.map((item, index) => `<label><span><strong>${esc(item.description)}</strong><small>UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)} · requested ${item.requested} cases</small></span><input class="picked-input" data-order="${order.id}" data-index="${index}" type="number" min="0" value="${item.picked || 0}" /></label>`).join('')}</div><div class="button-row"><button class="primary" data-accept-order="${order.id}" type="button">Accept complete order</button>${order.status === 'Accepted by Warehouse' ? `<button data-done-order="${order.id}" type="button">Done</button>` : ''}</div></article>`).join('') || '<p class="helper">No warehouse orders waiting.</p>';
   document.querySelectorAll('.picked-input').forEach((input) => input.addEventListener('change', () => { const order = state.orders.find((entry) => entry.id === input.dataset.order); if (order) order.items[Number(input.dataset.index)].picked = Math.max(0, Number(input.value) || 0); save(); }));
   document.querySelectorAll('[data-accept-order]').forEach((button) => button.addEventListener('click', () => acceptOrder(button.dataset.acceptOrder)));
   document.querySelectorAll('[data-done-order]').forEach((button) => button.addEventListener('click', () => finishOrder(button.dataset.doneOrder)));
@@ -97,7 +104,8 @@ function importInventory(file) { if (!file) { $('import-status').textContent = '
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'stockflow-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'stockflow-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
 document.querySelectorAll('[data-view]').forEach((element) => element.addEventListener('click', () => setView(element.dataset.view)));
-$('user-switch').addEventListener('change', (event) => { currentUser = state.users.find((user) => user.name === event.target.value) || currentUser; save(); render(); });
+$('login-form').addEventListener('submit', (event) => { event.preventDefault(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => entry.name.toLowerCase() === username && entry.password === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; $('login-status').textContent = ''; save(); render(); });
+$('logout-btn').addEventListener('click', () => { currentUser = null; currentView = 'home'; $('login-form').reset(); render(); });
 $('scan-btn').addEventListener('click', openCamera); $('manual-lookup-btn').addEventListener('click', () => handleBarcode($('scan-input').value)); $('close-camera-btn').addEventListener('click', closeCamera); $('cancel-quantity-btn').addEventListener('click', () => { $('quantity-modal').hidden = true; }); $('confirm-quantity-btn').addEventListener('click', addScannedItem); $('create-order-btn').addEventListener('click', createOrder); $('order-search').addEventListener('input', renderOrders); $('manager-search').addEventListener('input', renderManager); $('inventory-upload').addEventListener('change', (event) => importInventory(event.target.files[0])); $('import-inventory-btn').addEventListener('click', () => importInventory($('inventory-upload').files[0])); $('download-template-btn').addEventListener('click', downloadTemplate);
 $('user-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('user-name').value.trim(); const password = $('user-password').value; const role = $('user-role').value; const aisle = $('user-aisle').value.trim(); if (!name || !password || !role || !aisle) return; state.users.push({ name, password, role, aisle }); event.target.reset(); notify(`${name} account added`); render(); });
 render();

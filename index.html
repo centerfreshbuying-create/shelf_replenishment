@@ -7,10 +7,24 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <section id="login-screen" class="login-screen">
+      <div class="login-card">
+        <div class="brand"><span class="brand-mark">SF</span><div><p class="eyebrow">Warehouse operations</p><h1>StockFlow</h1></div></div>
+        <p class="eyebrow login-label">Secure sign in</p>
+        <h2>Welcome back</h2>
+        <p class="helper">Sign in with the username and password assigned by an administrator.</p>
+        <form id="login-form" class="login-form">
+          <label>Username<input id="login-username" autocomplete="username" required /></label>
+          <label>Password<input id="login-password" type="password" autocomplete="current-password" required /></label>
+          <button class="primary" type="submit">Sign in</button>
+          <p id="login-status" class="login-status" role="alert"></p>
+        </form>
+      </div>
+    </section>
     <div class="app-shell">
       <header class="topbar">
         <div class="brand"><span class="brand-mark">SF</span><div><p class="eyebrow">Warehouse operations</p><h1>StockFlow</h1></div></div>
-        <div class="session"><span class="live-dot"></span><span id="sync-status">Local sync on</span><select id="user-switch" aria-label="Current user"></select></div>
+        <div class="session"><span class="live-dot"></span><span id="sync-status">Local sync on</span><strong id="current-user">Signed out</strong><button id="logout-btn" type="button">Sign out</button></div>
       </header>
       <nav class="main-nav" aria-label="Application navigation">
         <button class="nav-tab active" data-view="home" type="button">Home</button>
