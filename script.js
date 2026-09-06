@@ -68,19 +68,19 @@ function loadState() {
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
     if (saved) {
-      const users = (saved.users?.length ? saved.users : [...defaultUsers]).map((user) => ({
+      const users = (saved.users?.length ? saved.users : [...defaultUsers]).map((user) => user && user.name ? ({
         name: String(user.name || '').trim().toLowerCase(),
         password: String(user.password || ''),
         role: String(user.role || 'employee').trim().toLowerCase(),
         aisle: String(user.aisle || 'Not assigned'),
-      })).filter((user) => user.name);
+      }) : null).filter(Boolean);
       const defaultAdmin = defaultUsers.find((user) => user.role === 'admin');
       if (defaultAdmin) {
         const admin = users.find((user) => user && user.name === defaultAdmin.name);
         if (!admin) users.push({ ...defaultAdmin });
         else if (!admin.password) Object.assign(admin, defaultAdmin);
       }
-      return { ...saved, inventory: [], users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
+      return { ...saved, inventory: [], users: users.length ? users : [...defaultUsers], orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
     }
   } catch (error) { console.warn('Saved state could not be loaded', error); }
   return { inventory: [], users: defaultUsers, orders: [], alerts: [], activity: ['nutmeg Replenish is ready.'], view: 'home', currentUser: defaultUsers[0] };
@@ -126,7 +126,7 @@ function save() {
 function ensureAdminAccount() { 
   const defaultAdmin = defaultUsers.find((user) => user.role === 'admin'); 
   if (!defaultAdmin) return null; // Safety check
-  let admin = state.users.find((user) => String(user.name).toLowerCase() === defaultAdmin.name); 
+  let admin = state.users.find((user) => user && String(user.name).toLowerCase() === defaultAdmin.name); 
   if (!admin) { admin = { ...defaultAdmin }; state.users.push(admin); } 
   else { admin.name = defaultAdmin.name; admin.password = defaultAdmin.password; admin.role = defaultAdmin.role; admin.aisle = defaultAdmin.aisle; } 
   return admin; 
@@ -265,7 +265,7 @@ function importInventory(file) {
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'replenish-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'replenish-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
 document.querySelectorAll('[data-view]').forEach((element) => element.addEventListener('click', () => setView(element.dataset.view)));
-function login() { ensureAdminAccount(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => String(entry.name).trim().toLowerCase() === username && String(entry.password) === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; save(); showAuthenticatedApp(); $('login-status').textContent = ''; try { render(); } catch (error) { console.error('Unable to render signed-in app', error); $('login-status').textContent = 'Signed in, but the dashboard could not load. Refresh the page.'; } }
+function login() { ensureAdminAccount(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => entry && String(entry.name).trim().toLowerCase() === username && String(entry.password) === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; save(); showAuthenticatedApp(); $('login-status').textContent = ''; try { render(); } catch (error) { console.error('Unable to render signed-in app', error); $('login-status').textContent = 'Signed in, but the dashboard could not load. Refresh the page.'; } }
 
 $('login-form').addEventListener('submit', (event) => { event.preventDefault(); login(); });
 $('logout-btn').addEventListener('click', () => { currentUser = null; currentView = 'home'; $('login-form').reset(); render(); });
