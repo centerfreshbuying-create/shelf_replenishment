@@ -66,10 +66,10 @@
             </button>
           </div>
           <div class="stats-grid">
-            <article class="stat-card"><span>Draft requests</span><strong id="stat-draft">0</strong></article>
-            <article class="stat-card"><span>In warehouse</span><strong id="stat-submitted">0</strong></article>
-            <article class="stat-card success"><span>Completed</span><strong id="stat-done">0</strong></article>
-            <article class="stat-card danger"><span>Out of stock</span><strong id="stat-out">0</strong></article>
+            <button class="stat-card" id="stat-draft-btn" type="button"><span>Draft requests</span><strong id="stat-draft">0</strong></button>
+            <button class="stat-card" id="stat-submitted-btn" type="button"><span>In warehouse</span><strong id="stat-submitted">0</strong></button>
+            <button class="stat-card success" id="stat-done-btn" type="button"><span>Completed</span><strong id="stat-done">0</strong></button>
+            <button class="stat-card danger" id="stat-out-btn" type="button"><span>Out of stock</span><strong id="stat-out">0</strong></button>
           </div>
         </section>
 
@@ -276,6 +276,28 @@
           <div class="button-row">
             <button class="primary" type="submit">Save changes</button>
             <button id="close-edit-user-submit" type="button">Cancel</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="edit-item-modal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-heading">
+          <h2>Edit inventory item</h2>
+          <button id="close-edit-item-btn" type="button">Close</button>
+        </div>
+        <form id="edit-item-form" class="form-grid">
+          <input id="edit-item-description" placeholder="Description" required />
+          <input id="edit-item-upc" placeholder="UPC/Code" required />
+          <input id="edit-item-brand" placeholder="Brand" />
+          <input id="edit-item-size" placeholder="Size" />
+          <input id="edit-item-location" placeholder="Location/Aisle" />
+          <input id="edit-item-on-hand" type="number" min="0" placeholder="On hand" required />
+          <input id="edit-item-safety-stock" type="number" min="0" placeholder="Safety stock" required />
+          <div class="button-row">
+            <button class="primary" type="submit">Save changes</button>
+            <button id="close-edit-item-submit" type="button">Cancel</button>
           </div>
         </form>
       </div>

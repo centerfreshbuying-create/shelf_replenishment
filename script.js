@@ -17,18 +17,30 @@ const defaultUsers = [
 ];
 let db = null;
 let cachedInventory = [];
+let inventoryIndex = {}; // Fast lookup by UPC
 
 async function initializeApp() {
   cachedInventory = [...defaultInventory];
+  rebuildInventoryIndex();
   try {
     await initDB();
     const dbInventory = await loadInventoryFromDB();
     if (dbInventory.length > 0) {
       cachedInventory = dbInventory;
+      rebuildInventoryIndex();
     }
   } catch (error) {
     console.warn('Failed to load IndexedDB inventory, using defaults:', error);
   }
+}
+
+function rebuildInventoryIndex() {
+  inventoryIndex = {};
+  cachedInventory.forEach((item) => {
+    if (item && item.upc) {
+      inventoryIndex[String(item.upc).trim()] = item;
+    }
+  });
 }
 
 const state = loadState();
@@ -137,7 +149,7 @@ function ensureAdminAccount() {
 function notify(message) { state.activity.unshift(`${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${message}`); state.activity = state.activity.slice(0, 30); save(); }
 function addEvent(order, label) { order.timeline ||= {}; order.timeline[label] = now(); }
 function setView(view) { currentView = view; document.querySelectorAll('.view').forEach((element) => element.classList.toggle('active', element.id === `${view}-view`)); document.querySelectorAll('.nav-tab').forEach((button) => button.classList.toggle('active', button.dataset.view === view)); save(); render(); }
-function itemByUpc(value) { const upc = String(value || '').trim(); return cachedInventory.find((item) => String(item.upc) === upc); }
+function itemByUpc(value) { const upc = String(value || '').trim(); return inventoryIndex[upc] || null; }
 function lowStock(item) { return Number(item.on_hand) <= Number(item.safety_stock); }
 function statusClass(status) { return status === 'Fully Fulfilled' ? 'success' : ['Out of Stock', 'Cancelled'].includes(status) ? 'danger' : status === 'Partially Fulfilled' ? 'warning' : ''; }
 
@@ -194,8 +206,10 @@ function renderManager() {
   const complete = state.orders.filter((order) => ['Fully Fulfilled'].includes(order.status));
   $('manager-waiting').textContent = state.orders.filter((order) => order.status === 'Submitted').length;
   $('manager-fulfilled').textContent = complete.length;
-  $('manager-inventory').innerHTML = cachedInventory.filter((item) => JSON.stringify(item).toLowerCase().includes(query)).map((item) => `<div class="list-row"><div><strong>${esc(item.description)}</strong><small>UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)}</small></div><span>${item.on_hand} on hand</span></div>`).join('') || '<p class="helper">No matching items.</p>';
+  $('manager-inventory').innerHTML = cachedInventory.filter((item) => item.description?.toLowerCase().includes(query) || item.upc?.includes(query) || item.brand?.toLowerCase().includes(query) || item.size?.toLowerCase().includes(query)).map((item) => `<div class="list-row"><div><strong>${esc(item.description)}</strong><small>UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)}</small></div><div class="button-row compact"><span>${item.on_hand} on hand</span><button data-edit-item="${esc(item.upc)}" type="button">Edit</button><button class="danger" data-delete-item="${esc(item.upc)}" type="button">Delete</button></div></div>`).join('') || '<p class="helper">No matching items.</p>';
   $('alerts-list').innerHTML = state.alerts.map((alert, index) => `<div class="alert-row"><strong>${esc(alert.description)}</strong><small>UPC ${esc(alert.upc)} · requested ${alert.requested} · fulfilled ${alert.fulfilled}</small><small>${esc(alert.reason)} · ${new Date(alert.createdAt).toLocaleString()}</small><button data-clear-alert="${index}" type="button">Clear</button></div>`).join('') || '<p class="helper">No active alerts.</p>';
+  document.querySelectorAll('[data-edit-item]').forEach((button) => button.addEventListener('click', () => editItem(button.dataset.editItem)));
+  document.querySelectorAll('[data-delete-item]').forEach((button) => button.addEventListener('click', () => { cachedInventory = cachedInventory.filter((item) => item.upc !== button.dataset.deleteItem); rebuildInventoryIndex(); saveInventoryToDB(cachedInventory); notify('Item deleted from inventory'); render(); }));
   document.querySelectorAll('[data-clear-alert]').forEach((button) => button.addEventListener('click', () => { state.alerts.splice(Number(button.dataset.clearAlert), 1); notify('An alert was cleared'); render(); }));
 }
 
@@ -236,6 +250,39 @@ function editUser(username) {
   };
 }
 
+function editItem(upc) {
+  const item = cachedInventory.find((entry) => entry && entry.upc === upc);
+  if (!item) return;
+  const modal = $('edit-item-modal');
+  const form = $('edit-item-form');
+  $('edit-item-description').value = item.description;
+  $('edit-item-upc').value = item.upc;
+  $('edit-item-brand').value = item.brand;
+  $('edit-item-size').value = item.size;
+  $('edit-item-location').value = item.location;
+  $('edit-item-on-hand').value = item.on_hand;
+  $('edit-item-safety-stock').value = item.safety_stock;
+  modal.hidden = false;
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    const description = $('edit-item-description').value.trim();
+    const newUpc = $('edit-item-upc').value.trim();
+    const brand = $('edit-item-brand').value.trim();
+    const size = $('edit-item-size').value.trim();
+    const location = $('edit-item-location').value.trim();
+    const on_hand = Number($('edit-item-on-hand').value) || 0;
+    const safety_stock = Number($('edit-item-safety-stock').value) || 0;
+    if (description && newUpc) {
+      Object.assign(item, { description, upc: newUpc, brand, size, location, on_hand, safety_stock });
+      rebuildInventoryIndex();
+      modal.hidden = true;
+      saveInventoryToDB(cachedInventory);
+      notify('Item updated');
+      render();
+    }
+  };
+}
+
 function normalizeRow(row) { const keys = Object.keys(row).reduce((all, key) => { all[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key]; return all; }, {}); const value = (...names) => names.map((name) => keys[name.toLowerCase().replace(/[^a-z0-9]/g, '')]).find((entry) => entry !== undefined && entry !== ''); const description = String(value('desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname') || '').trim(); let upc = String(value('code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode') || '').replace(/\s+/g, '').trim(); if (/^\d+$/.test(upc) && upc.length < 12) upc = upc.padStart(12, '0'); if (!description || !upc) return null; return { description, upc, brand: String(value('brand', 'manufacturer') || '').trim(), size: String(value('size', 'uom', 'unitofmeasure') || '').trim(), location: String(value('location', 'aisle', 'bin') || '').trim(), on_hand: Number(value('onhand', 'quantityonhand', 'qtyonhand') || 0), safety_stock: Number(value('safetystock', 'minimumstock', 'minstock') || 0) }; }
 
 function parseCsv(text) { const rows = []; let row = []; let value = ''; let quoted = false; for (let index = 0; index < text.length; index += 1) { const character = text[index]; const next = text[index + 1]; if (character === '"' && quoted && next === '"') { value += '"'; index += 1; } else if (character === '"') quoted = !quoted; else if (character === ',' && !quoted) { row.push(value); value = ''; } else if ((character === '\n' || character === '\r') && !quoted) { if (character === '\r' && next === '\n') index += 1; row.push(value); if (row.some((entry) => entry.trim())) rows.push(row); row = []; value = ''; } else value += character; } if (value || row.length) { row.push(value); rows.push(row); } const headers = rows.shift()?.map((header) => header.trim()) || []; return rows.map((values) => headers.reduce((record, header, index) => { record[header] = values[index] || ''; return record; }, {})); }
@@ -268,6 +315,7 @@ function importInventory(file) {
         cachedInventory = newInventory; 
         $('import-status').textContent = `Imported ${newItems.length} new items (${items.length - newItems.length} duplicates skipped). Total inventory: ${cachedInventory.length} items.`; 
       } 
+      rebuildInventoryIndex();
       notify(`${newItems.length} new inventory items imported from ${file.name}`);
       try { 
         await saveInventoryToDB(cachedInventory); 
@@ -299,6 +347,13 @@ $('scan-btn').addEventListener('click', openCamera);
 $('manual-lookup-btn').addEventListener('click', () => handleBarcode($('scan-input').value));
 $('close-camera-btn').addEventListener('click', closeCamera);
 $('close-edit-user-btn').addEventListener('click', () => { $('edit-user-modal').hidden = true; });
+$('close-edit-item-btn').addEventListener('click', () => { $('edit-item-modal').hidden = true; });
+$('close-edit-item-submit').addEventListener('click', () => { $('edit-item-modal').hidden = true; });
+$('close-edit-user-submit').addEventListener('click', () => { $('edit-user-modal').hidden = true; });
+$('stat-draft-btn').addEventListener('click', () => setView('scan'));
+$('stat-submitted-btn').addEventListener('click', () => setView('warehouse'));
+$('stat-done-btn').addEventListener('click', () => setView('manager'));
+$('stat-out-btn').addEventListener('click', () => setView('manager'));
 $('create-order-btn').addEventListener('click', createOrder);
 $('manager-search').addEventListener('input', renderManager);
 $('inventory-upload').addEventListener('change', (event) => importInventory(event.target.files[0]));
