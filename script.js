@@ -43,7 +43,32 @@ function loadState() {
   return { inventory: defaultInventory, users: defaultUsers, orders: [], alerts: [], activity: ['Replenish is ready.'], view: 'home', currentUser: defaultUsers[0] };
 }
 
-function save() { state.view = currentView; state.currentUser = currentUser; localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+function save() {
+  state.view = currentView;
+  state.currentUser = currentUser;
+  // Clean up old orders (keep only 50 most recent, or last 30 days for completed)
+  const now_ms = Date.now();
+  state.orders = state.orders.filter((order, idx) => {
+    if (idx < 20) return true; // Always keep 20 most recent
+    const createdMs = new Date(order.createdAt).getTime();
+    const ageMs = now_ms - createdMs;
+    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+    return ageMs < thirtyDays || !['Fully Fulfilled', 'Out of Stock', 'Cancelled'].includes(order.status);
+  }).slice(0, 100); // Cap at 100 total orders
+  // Clean up old alerts (keep only 50)
+  state.alerts = state.alerts.slice(0, 50);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  } catch (error) {
+    if (error.name === 'QuotaExceededError') {
+      console.warn('Storage quota exceeded, clearing old orders...');
+      state.orders = state.orders.slice(0, 10);
+      state.alerts = state.alerts.slice(0, 10);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      notify('Storage cleaned up - old data removed');
+    } else throw error;
+  }
+}
 function ensureAdminAccount() { const defaultAdmin = defaultUsers.find((user) => user.role === 'admin'); let admin = state.users.find((user) => String(user.name).toLowerCase() === defaultAdmin.name); if (!admin) { admin = { ...defaultAdmin }; state.users.push(admin); } else { admin.name = defaultAdmin.name; admin.password = defaultAdmin.password; admin.role = defaultAdmin.role; admin.aisle = defaultAdmin.aisle; } return admin; }
 function notify(message) { state.activity.unshift(`${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${message}`); state.activity = state.activity.slice(0, 30); save(); }
 function addEvent(order, label) { order.timeline ||= {}; order.timeline[label] = now(); }
