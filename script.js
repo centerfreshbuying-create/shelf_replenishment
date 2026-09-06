@@ -19,12 +19,15 @@ let db = null;
 let cachedInventory = [];
 
 async function initializeApp() {
+  cachedInventory = [...defaultInventory];
   try {
     await initDB();
-    cachedInventory = await loadInventoryFromDB();
+    const dbInventory = await loadInventoryFromDB();
+    if (dbInventory.length > 0) {
+      cachedInventory = dbInventory;
+    }
   } catch (error) {
-    console.warn('Failed to initialize IndexedDB:', error);
-    cachedInventory = [...defaultInventory];
+    console.warn('Failed to load IndexedDB inventory, using defaults:', error);
   }
 }
 
@@ -207,8 +210,31 @@ function closeCamera() { barcodeReader?.reset(); barcodeReader = undefined; came
 
 function createOrder() { if (!currentUser) return alert('You must be logged in.'); if (!state.refillList?.length) return alert('Add at least one scanned item first.'); const order = { id: id('ORD'), employee: currentUser?.name || 'Unknown', store: 'Main store', createdAt: now(), status: 'Submitted', items: state.refillList.map((item) => ({ ...item, requested: item.quantity, picked: 0, unavailable: 0 })), timeline: {} }; addEvent(order, 'requestCreated'); addEvent(order, 'submitted'); state.orders.unshift(order); state.refillList = []; notify(`${order.id} submitted by ${currentUser?.name || 'User'}`); render(); alert(`${order.id} sent to warehouse.`); }
 function acceptOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; order.status = 'Accepted by Warehouse'; addEvent(order, 'accepted'); addEvent(order, 'pickStarted'); notify(`${order.id} accepted by warehouse`); render(); }
-function finishOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; addEvent(order, 'pickCompleted'); const unavailable = order.items.filter((item) => Number(item.picked) === 0); order.items.forEach((item) => { item.unavailable = Math.max(0, item.requested - Number(item.picked || 0)); }); if (unavailable.length) { order.status = unavailable.length === order.items.length ? 'Out of Stock' : 'Partially Fulfilled'; unavailable.forEach((item) => state.alerts.push({ description: item.description, upc: item.upc, requested: item.requested, fulfilled: item.picked || 0, store: order.store, warehouse: 'North Warehouse', createdAt: now(), processedBy: currentUser?.name || 'Unknown', reason: 'No cases available' })); notify(`${order.id} generated ${unavailable.length} stock alert(s)`); } else { order.status = 'Fully Fulfilled'; notify(`${order.id} was fully fulfilled`); } save(); render(); }
-function editUser(username) { const user = state.users.find((entry) => entry && entry.name === username); if (!user) return; const name = prompt('Username', user.name); const password = prompt('Password', user.password); const role = prompt('Role: employee, warehouse, manager, or admin', user.role); const aisle = prompt('Aisle/Zone', user.aisle); if (name && password && aisle && ROLE_LABELS[role]) { Object.assign(user, { name: name.trim(), password, role, aisle: aisle.trim() }); save(); render(); } }
+function finishOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; addEvent(order, 'pickCompleted'); const unavailable = order.items.filter((item) => Number(item.picked) === 0); order.items.forEach((item) => { item.unavailable = Math.max(0, item.requested - Number(item.picked || 0)); }); if (unavailable.length) { order.status = 'Out of Stock'; unavailable.forEach((item) => state.alerts.push({ description: item.description, upc: item.upc, requested: item.requested, fulfilled: item.picked || 0, store: order.store, warehouse: 'North Warehouse', createdAt: now(), processedBy: currentUser?.name || 'Unknown', reason: 'No cases available' })); notify(`${order.id} marked out of stock with ${unavailable.length} missing item(s)`); } else { order.status = 'Fully Fulfilled'; notify(`${order.id} was fully fulfilled`); } save(); render(); }
+function editUser(username) {
+  const user = state.users.find((entry) => entry && entry.name === username);
+  if (!user) return;
+  const modal = $('edit-user-modal');
+  const form = $('edit-user-form');
+  $('edit-user-name').value = user.name;
+  $('edit-user-password').value = user.password;
+  $('edit-user-role').value = user.role;
+  $('edit-user-aisle').value = user.aisle;
+  modal.hidden = false;
+  form.onsubmit = (event) => {
+    event.preventDefault();
+    const name = $('edit-user-name').value.trim();
+    const password = $('edit-user-password').value;
+    const role = $('edit-user-role').value;
+    const aisle = $('edit-user-aisle').value;
+    if (name && password && role && aisle) {
+      Object.assign(user, { name, password, role, aisle });
+      modal.hidden = true;
+      save();
+      render();
+    }
+  };
+}
 
 function normalizeRow(row) { const keys = Object.keys(row).reduce((all, key) => { all[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key]; return all; }, {}); const value = (...names) => names.map((name) => keys[name.toLowerCase().replace(/[^a-z0-9]/g, '')]).find((entry) => entry !== undefined && entry !== ''); const description = String(value('desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname') || '').trim(); let upc = String(value('code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode') || '').replace(/\s+/g, '').trim(); if (/^\d+$/.test(upc) && upc.length < 12) upc = upc.padStart(12, '0'); if (!description || !upc) return null; return { description, upc, brand: String(value('brand', 'manufacturer') || '').trim(), size: String(value('size', 'uom', 'unitofmeasure') || '').trim(), location: String(value('location', 'aisle', 'bin') || '').trim(), on_hand: Number(value('onhand', 'quantityonhand', 'qtyonhand') || 0), safety_stock: Number(value('safetystock', 'minimumstock', 'minstock') || 0) }; }
 
@@ -272,6 +298,7 @@ $('logout-btn').addEventListener('click', () => { currentUser = null; currentVie
 $('scan-btn').addEventListener('click', openCamera);
 $('manual-lookup-btn').addEventListener('click', () => handleBarcode($('scan-input').value));
 $('close-camera-btn').addEventListener('click', closeCamera);
+$('close-edit-user-btn').addEventListener('click', () => { $('edit-user-modal').hidden = true; });
 $('create-order-btn').addEventListener('click', createOrder);
 $('manager-search').addEventListener('input', renderManager);
 $('inventory-upload').addEventListener('change', (event) => importInventory(event.target.files[0]));
