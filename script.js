@@ -17,6 +17,17 @@ const defaultUsers = [
 ];
 let db = null;
 let cachedInventory = [];
+
+async function initializeApp() {
+  try {
+    await initDB();
+    cachedInventory = await loadInventoryFromDB();
+  } catch (error) {
+    console.warn('Failed to initialize IndexedDB:', error);
+    cachedInventory = [...defaultInventory];
+  }
+}
+
 const state = loadState();
 let currentView = state.view || 'home';
 let currentUser = state.currentUser?.name ? state.users.find((user) => user.name === state.currentUser.name) || null : null;
@@ -110,7 +121,14 @@ function save() {
     } else throw error;
   }
 }
-function ensureAdminAccount() { const defaultAdmin = defaultUsers.find((user) => user.role === 'admin'); let admin = state.users.find((user) => String(user.name).toLowerCase() === defaultAdmin.name); if (!admin) { admin = { ...defaultAdmin }; state.users.push(admin); } else { admin.name = defaultAdmin.name; admin.password = defaultAdmin.password; admin.role = defaultAdmin.role; admin.aisle = defaultAdmin.aisle; } return admin; }
+function ensureAdminAccount() { 
+  const defaultAdmin = defaultUsers.find((user) => user.role === 'admin'); 
+  if (!defaultAdmin) return null; // Safety check
+  let admin = state.users.find((user) => String(user.name).toLowerCase() === defaultAdmin.name); 
+  if (!admin) { admin = { ...defaultAdmin }; state.users.push(admin); } 
+  else { admin.name = defaultAdmin.name; admin.password = defaultAdmin.password; admin.role = defaultAdmin.role; admin.aisle = defaultAdmin.aisle; } 
+  return admin; 
+}
 function notify(message) { state.activity.unshift(`${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${message}`); state.activity = state.activity.slice(0, 30); save(); }
 function addEvent(order, label) { order.timeline ||= {}; order.timeline[label] = now(); }
 function setView(view) { currentView = view; document.querySelectorAll('.view').forEach((element) => element.classList.toggle('active', element.id === `${view}-view`)); document.querySelectorAll('.nav-tab').forEach((button) => button.classList.toggle('active', button.dataset.view === view)); save(); render(); }
@@ -125,10 +143,14 @@ function showAuthenticatedApp() { const loginScreen = $('login-screen'); const a
 function render() {
   showAuthenticatedApp();
   if (!currentUser) return;
-  renderHome(); renderScan(); renderWarehouse(); renderManager(); renderUsers();
-  $('current-user').textContent = `${currentUser.name} · ${ROLE_LABELS[currentUser.role] || currentUser.role}`;
-  document.querySelectorAll('.nav-tab').forEach((button) => { button.hidden = !canAccess(button.dataset.view); });
-  if (!canAccess(currentView)) setView('home');
+  try {
+    renderHome(); renderScan(); renderWarehouse(); renderManager(); renderUsers();
+    $('current-user').textContent = `${currentUser?.name || 'User'} · ${ROLE_LABELS[currentUser?.role] || currentUser?.role || 'N/A'}`;
+    document.querySelectorAll('.nav-tab').forEach((button) => { button.hidden = !canAccess(button.dataset.view); });
+    if (!canAccess(currentView)) setView('home');
+  } catch (error) {
+    console.error('Render error:', error);
+  }
 }
 
 function renderHome() {
@@ -192,7 +214,50 @@ function parseCsv(text) { const rows = []; let row = []; let value = ''; let quo
 
 function rowsFromWorksheet(worksheet) { const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false }); const itemCodeHeaders = ['code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode']; const descriptionHeaders = ['desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname']; const headerIndex = matrix.findIndex((row) => row.some((cell) => itemCodeHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, ''))) && row.some((cell) => descriptionHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, '')))); if (headerIndex < 0) return []; const headers = matrix[headerIndex].map((header) => String(header).trim()); return matrix.slice(headerIndex + 1).filter((row) => row.some((cell) => String(cell).trim())).map((row) => headers.reduce((record, header, index) => { record[header] = row[index] ?? ''; return record; }, {})); }
 
-function importInventory(file) { if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } const extension = file.name.split('.').pop().toLowerCase(); if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } const reader = new FileReader(); reader.onload = async (event) => { try { let rows; if (extension === 'csv') { rows = parseCsv(event.target.result); } else { if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); } const items = rows.map(normalizeRow).filter(Boolean); if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); const newInventory = [...cachedInventory.filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; if (newInventory.length > 40000) { cachedInventory = newInventory.slice(0, 40000); $('import-status').textContent = `Imported ${items.length} items (capped at 40000 total).`; } else { cachedInventory = newInventory; $('import-status').textContent = `Imported ${items.length} items. Total inventory: ${cachedInventory.length} items.`; } notify(`${items.length} inventory items imported from ${file.name}`); try { await saveInventoryToDB(cachedInventory); save(); render(); } catch (error) { if (error.name === 'QuotaExceededError') throw new Error('Storage quota exceeded. Try importing fewer items.'); throw error; } } catch (error) { console.error('Inventory import failed', error); $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; } }; reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; if (extension === 'csv') reader.readAsText(file, 'UTF-8'); else if (extension === 'xls') reader.readAsBinaryString(file); else reader.readAsArrayBuffer(file); }
+function importInventory(file) { 
+  if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } 
+  if (!Array.isArray(cachedInventory)) cachedInventory = [];
+  const extension = file.name.split('.').pop().toLowerCase(); 
+  if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } 
+  const reader = new FileReader(); 
+  reader.onload = async (event) => { 
+    try { 
+      let rows; 
+      if (extension === 'csv') { rows = parseCsv(event.target.result); } 
+      else { 
+        if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); 
+        const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); 
+        rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); 
+      } 
+      const items = rows.map(normalizeRow).filter(Boolean); 
+      if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); 
+      const newInventory = [...(cachedInventory || []).filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; 
+      if (newInventory.length > 40000) { 
+        cachedInventory = newInventory.slice(0, 40000); 
+        $('import-status').textContent = `Imported ${items.length} items (capped at 40000 total).`; 
+      } else { 
+        cachedInventory = newInventory; 
+        $('import-status').textContent = `Imported ${items.length} items. Total inventory: ${cachedInventory.length} items.`; 
+      } 
+      notify(`${items.length} inventory items imported from ${file.name}`); 
+      try { 
+        await saveInventoryToDB(cachedInventory); 
+        save(); 
+        render(); 
+      } catch (error) { 
+        if (error.name === 'QuotaExceededError') throw new Error('Storage quota exceeded. Try importing fewer items.'); 
+        throw error; 
+      } 
+    } catch (error) { 
+      console.error('Inventory import failed', error); 
+      $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; 
+    } 
+  }; 
+  reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; 
+  if (extension === 'csv') reader.readAsText(file, 'UTF-8'); 
+  else if (extension === 'xls') reader.readAsBinaryString(file); 
+  else reader.readAsArrayBuffer(file); 
+}
 
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'replenish-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'replenish-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
@@ -211,4 +276,8 @@ $('import-inventory-btn').addEventListener('click', () => importInventory($('inv
 $('download-template-btn').addEventListener('click', downloadTemplate);
 $('user-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('user-name').value.trim(); const password = $('user-password').value; const role = $('user-role').value; const aisle = $('user-aisle').value.trim(); if (!name || !password || !role || !aisle) return; state.users.push({ name, password, role, aisle }); event.target.reset(); notify(`${name} account added`); render(); });
 
-render();
+initializeApp().then(() => render()).catch((error) => {
+  console.error('App initialization failed:', error);
+  cachedInventory = [...defaultInventory];
+  render();
+});
