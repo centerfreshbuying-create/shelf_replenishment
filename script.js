@@ -75,9 +75,11 @@ function loadState() {
         aisle: String(user.aisle || 'Not assigned'),
       })).filter((user) => user.name);
       const defaultAdmin = defaultUsers.find((user) => user.role === 'admin');
-      const admin = users.find((user) => user.name === defaultAdmin.name);
-      if (!admin) users.push({ ...defaultAdmin });
-      else if (!admin.password) Object.assign(admin, defaultAdmin);
+      if (defaultAdmin) {
+        const admin = users.find((user) => user.name === defaultAdmin.name);
+        if (!admin) users.push({ ...defaultAdmin });
+        else if (!admin.password) Object.assign(admin, defaultAdmin);
+      }
       return { ...saved, inventory: [], users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
     }
   } catch (error) { console.warn('Saved state could not be loaded', error); }
@@ -203,9 +205,9 @@ async function openCamera() { $('camera-modal').hidden = false; $('camera-status
 async function scanNativeBarcode() { if ($('camera-modal').hidden) return; try { const detector = new BarcodeDetector(); const codes = await detector.detect($('camera-video')); if (codes.length) { closeCamera(); handleBarcode(codes[0].rawValue); return; } } catch (error) { /* Continue polling */ } requestAnimationFrame(scanNativeBarcode); }
 function closeCamera() { barcodeReader?.reset(); barcodeReader = undefined; cameraStream?.getTracks().forEach((track) => track.stop()); cameraStream = undefined; $('camera-video').srcObject = null; $('camera-modal').hidden = true; }
 
-function createOrder() { if (!state.refillList?.length) return alert('Add at least one scanned item first.'); const order = { id: id('ORD'), employee: currentUser.name, store: 'Main store', createdAt: now(), status: 'Submitted', items: state.refillList.map((item) => ({ ...item, requested: item.quantity, picked: 0, unavailable: 0 })), timeline: {} }; addEvent(order, 'requestCreated'); addEvent(order, 'submitted'); state.orders.unshift(order); state.refillList = []; notify(`${order.id} submitted by ${currentUser.name}`); render(); alert(`${order.id} sent to warehouse.`); }
+function createOrder() { if (!currentUser) return alert('You must be logged in.'); if (!state.refillList?.length) return alert('Add at least one scanned item first.'); const order = { id: id('ORD'), employee: currentUser?.name || 'Unknown', store: 'Main store', createdAt: now(), status: 'Submitted', items: state.refillList.map((item) => ({ ...item, requested: item.quantity, picked: 0, unavailable: 0 })), timeline: {} }; addEvent(order, 'requestCreated'); addEvent(order, 'submitted'); state.orders.unshift(order); state.refillList = []; notify(`${order.id} submitted by ${currentUser?.name || 'User'}`); render(); alert(`${order.id} sent to warehouse.`); }
 function acceptOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; order.status = 'Accepted by Warehouse'; addEvent(order, 'accepted'); addEvent(order, 'pickStarted'); notify(`${order.id} accepted by warehouse`); render(); }
-function finishOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; addEvent(order, 'pickCompleted'); const unavailable = order.items.filter((item) => Number(item.picked) === 0); order.items.forEach((item) => { item.unavailable = Math.max(0, item.requested - Number(item.picked || 0)); }); if (unavailable.length) { order.status = unavailable.length === order.items.length ? 'Out of Stock' : 'Partially Fulfilled'; unavailable.forEach((item) => state.alerts.push({ description: item.description, upc: item.upc, requested: item.requested, fulfilled: item.picked || 0, store: order.store, warehouse: 'North Warehouse', createdAt: now(), processedBy: currentUser.name, reason: 'No cases available' })); notify(`${order.id} generated ${unavailable.length} stock alert(s)`); } else { order.status = 'Fully Fulfilled'; notify(`${order.id} was fully fulfilled`); } save(); render(); }
+function finishOrder(orderId) { const order = state.orders.find((entry) => entry.id === orderId); if (!order) return; addEvent(order, 'pickCompleted'); const unavailable = order.items.filter((item) => Number(item.picked) === 0); order.items.forEach((item) => { item.unavailable = Math.max(0, item.requested - Number(item.picked || 0)); }); if (unavailable.length) { order.status = unavailable.length === order.items.length ? 'Out of Stock' : 'Partially Fulfilled'; unavailable.forEach((item) => state.alerts.push({ description: item.description, upc: item.upc, requested: item.requested, fulfilled: item.picked || 0, store: order.store, warehouse: 'North Warehouse', createdAt: now(), processedBy: currentUser?.name || 'Unknown', reason: 'No cases available' })); notify(`${order.id} generated ${unavailable.length} stock alert(s)`); } else { order.status = 'Fully Fulfilled'; notify(`${order.id} was fully fulfilled`); } save(); render(); }
 function editUser(username) { const user = state.users.find((entry) => entry.name === username); if (!user) return; const name = prompt('Username', user.name); const password = prompt('Password', user.password); const role = prompt('Role: employee, warehouse, manager, or admin', user.role); const aisle = prompt('Aisle/Zone', user.aisle); if (name && password && aisle && ROLE_LABELS[role]) { Object.assign(user, { name: name.trim(), password, role, aisle: aisle.trim() }); save(); render(); } }
 
 function normalizeRow(row) { const keys = Object.keys(row).reduce((all, key) => { all[key.toLowerCase().replace(/[^a-z0-9]/g, '')] = row[key]; return all; }, {}); const value = (...names) => names.map((name) => keys[name.toLowerCase().replace(/[^a-z0-9]/g, '')]).find((entry) => entry !== undefined && entry !== ''); const description = String(value('desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname') || '').trim(); let upc = String(value('code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode') || '').replace(/\s+/g, '').trim(); if (/^\d+$/.test(upc) && upc.length < 12) upc = upc.padStart(12, '0'); if (!description || !upc) return null; return { description, upc, brand: String(value('brand', 'manufacturer') || '').trim(), size: String(value('size', 'uom', 'unitofmeasure') || '').trim(), location: String(value('location', 'aisle', 'bin') || '').trim(), on_hand: Number(value('onhand', 'quantityonhand', 'qtyonhand') || 0), safety_stock: Number(value('safetystock', 'minimumstock', 'minstock') || 0) }; }
@@ -231,15 +233,16 @@ function importInventory(file) {
       } 
       const items = rows.map(normalizeRow).filter(Boolean); 
       if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); 
-      const newInventory = [...(cachedInventory || []).filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; 
+      const newItems = items.filter((item) => !cachedInventory.some((existing) => existing.upc === item.upc)); 
+      const newInventory = [...cachedInventory, ...newItems]; 
       if (newInventory.length > 40000) { 
         cachedInventory = newInventory.slice(0, 40000); 
-        $('import-status').textContent = `Imported ${items.length} items (capped at 40000 total).`; 
+        $('import-status').textContent = `Imported ${newItems.length} new items (${items.length - newItems.length} duplicates skipped, capped at 40000 total).`; 
       } else { 
         cachedInventory = newInventory; 
-        $('import-status').textContent = `Imported ${items.length} items. Total inventory: ${cachedInventory.length} items.`; 
+        $('import-status').textContent = `Imported ${newItems.length} new items (${items.length - newItems.length} duplicates skipped). Total inventory: ${cachedInventory.length} items.`; 
       } 
-      notify(`${items.length} inventory items imported from ${file.name}`); 
+      notify(`${newItems.length} new inventory items imported from ${file.name}`);
       try { 
         await saveInventoryToDB(cachedInventory); 
         save(); 
