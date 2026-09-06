@@ -46,26 +46,29 @@ function loadState() {
 function save() {
   state.view = currentView;
   state.currentUser = currentUser;
-  // Clean up old orders (keep only 50 most recent, or last 30 days for completed)
+  // Aggressive cleanup to prevent quota exceeded
   const now_ms = Date.now();
-  state.orders = state.orders.filter((order, idx) => {
-    if (idx < 20) return true; // Always keep 20 most recent
-    const createdMs = new Date(order.createdAt).getTime();
-    const ageMs = now_ms - createdMs;
-    const thirtyDays = 30 * 24 * 60 * 60 * 1000;
-    return ageMs < thirtyDays || !['Fully Fulfilled', 'Out of Stock', 'Cancelled'].includes(order.status);
-  }).slice(0, 100); // Cap at 100 total orders
-  // Clean up old alerts (keep only 50)
-  state.alerts = state.alerts.slice(0, 50);
+  // Keep only 30 most recent orders
+  state.orders = state.orders.slice(0, 30);
+  // Keep only 25 alerts
+  state.alerts = state.alerts.slice(0, 25);
+  // Keep inventory under 5000 items (most recent first)
+  if (state.inventory?.length > 5000) state.inventory = state.inventory.slice(0, 5000);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     if (error.name === 'QuotaExceededError') {
-      console.warn('Storage quota exceeded, clearing old orders...');
-      state.orders = state.orders.slice(0, 10);
-      state.alerts = state.alerts.slice(0, 10);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-      notify('Storage cleaned up - old data removed');
+      console.warn('Storage quota exceeded, performing aggressive cleanup...');
+      state.orders = state.orders.slice(0, 5);
+      state.alerts = state.alerts.slice(0, 5);
+      state.inventory = state.inventory?.slice(0, 1000) || defaultInventory;
+      state.activity = state.activity?.slice(0, 10) || [];
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+        notify('Storage cleared - old data removed to save space');
+      } catch (retry_error) {
+        alert('Storage quota exceeded. Please clear browser data and reload.');
+      }
     } else throw error;
   }
 }
@@ -151,7 +154,7 @@ function parseCsv(text) { const rows = []; let row = []; let value = ''; let quo
 
 function rowsFromWorksheet(worksheet) { const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false }); const itemCodeHeaders = ['code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode']; const descriptionHeaders = ['desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname']; const headerIndex = matrix.findIndex((row) => row.some((cell) => itemCodeHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, ''))) && row.some((cell) => descriptionHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, '')))); if (headerIndex < 0) return []; const headers = matrix[headerIndex].map((header) => String(header).trim()); return matrix.slice(headerIndex + 1).filter((row) => row.some((cell) => String(cell).trim())).map((row) => headers.reduce((record, header, index) => { record[header] = row[index] ?? ''; return record; }, {})); }
 
-function importInventory(file) { if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } const extension = file.name.split('.').pop().toLowerCase(); if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } const reader = new FileReader(); reader.onload = (event) => { try { let rows; if (extension === 'csv') { rows = parseCsv(event.target.result); } else { if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); } const items = rows.map(normalizeRow).filter(Boolean); if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); state.inventory = [...state.inventory.filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; notify(`${items.length} inventory items imported from ${file.name}`); $('import-status').textContent = `Imported ${items.length} items from ${file.name}.`; save(); render(); } catch (error) { console.error('Inventory import failed', error); $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; } }; reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; if (extension === 'csv') reader.readAsText(file, 'UTF-8'); else if (extension === 'xls') reader.readAsBinaryString(file); else reader.readAsArrayBuffer(file); }
+function importInventory(file) { if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } const extension = file.name.split('.').pop().toLowerCase(); if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } const reader = new FileReader(); reader.onload = (event) => { try { let rows; if (extension === 'csv') { rows = parseCsv(event.target.result); } else { if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); } const items = rows.map(normalizeRow).filter(Boolean); if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); state.inventory = [...state.inventory.filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; if (state.inventory.length > 5000) { state.inventory = state.inventory.slice(0, 5000); $('import-status').textContent = `Imported ${Math.min(items.length, 5000)} items (capped at 5000 total).`; } else { $('import-status').textContent = `Imported ${items.length} items from ${file.name}. Total inventory: ${state.inventory.length} items.`; } notify(`${items.length} inventory items imported from ${file.name}`); try { save(); } catch (error) { if (error.name === 'QuotaExceededError') throw new Error('Storage quota exceeded. Try importing fewer items or clear old orders first.'); throw error; } render(); } catch (error) { console.error('Inventory import failed', error); $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; } }; reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; if (extension === 'csv') reader.readAsText(file, 'UTF-8'); else if (extension === 'xls') reader.readAsBinaryString(file); else reader.readAsArrayBuffer(file); }
 
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'replenish-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'replenish-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
