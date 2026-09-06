@@ -1,4 +1,6 @@
 const STORAGE_KEY = 'replenish-state';
+const DB_NAME = 'replenish-db';
+const DB_VERSION = 1;
 const STATUSES = ['Draft', 'Submitted', 'Accepted by Warehouse', 'Picking in Progress', 'Partially Fulfilled', 'Fully Fulfilled', 'Out of Stock', 'Cancelled'];
 const ROLE_LABELS = { employee: 'Employee', manager: 'Manager', warehouse: 'Warehouse', admin: 'Admin' };
 const defaultInventory = [
@@ -13,15 +15,43 @@ const defaultUsers = [
   { name: 'anita', password: 'manager123', role: 'manager', aisle: 'All aisles' },
   { name: 'admin', password: 'admin123', role: 'admin', aisle: 'All aisles' },
 ];
+let db = null;
+let cachedInventory = [];
 const state = loadState();
 let currentView = state.view || 'home';
 let currentUser = state.currentUser?.name ? state.users.find((user) => user.name === state.currentUser.name) || null : null;
 let cameraStream, barcodeReader;
 const $ = (id) => document.getElementById(id);
 
+function initDB() {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => { db = request.result; resolve(db); };
+    request.onupgradeneeded = (event) => {
+      const database = event.target.result;
+      if (!database.objectStoreNames.contains('inventory')) {
+        const store = database.createObjectStore('inventory', { keyPath: 'upc' });
+        store.createIndex('description', 'description', { unique: false });
+      }
+    };
+  });
+}
+
 function now() { return new Date().toISOString(); }
 function id(prefix) { return `${prefix}-${Date.now().toString().slice(-6)}`; }
 function esc(value) { return String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char])); }
+
+async function loadInventoryFromDB() {
+  if (!db) await initDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction('inventory', 'readonly');
+    const store = tx.objectStore('inventory');
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve([]);
+  });
+}
 
 function loadState() {
   try {
@@ -37,35 +67,43 @@ function loadState() {
       const admin = users.find((user) => user.name === defaultAdmin.name);
       if (!admin) users.push({ ...defaultAdmin });
       else if (!admin.password) Object.assign(admin, defaultAdmin);
-      return { ...saved, inventory: saved.inventory?.length ? saved.inventory : defaultInventory, users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
+      return { ...saved, inventory: [], users, orders: saved.orders || [], alerts: saved.alerts || [], activity: saved.activity || [] };
     }
   } catch (error) { console.warn('Saved state could not be loaded', error); }
-  return { inventory: defaultInventory, users: defaultUsers, orders: [], alerts: [], activity: ['Replenish is ready.'], view: 'home', currentUser: defaultUsers[0] };
+  return { inventory: [], users: defaultUsers, orders: [], alerts: [], activity: ['nutmeg Replenish is ready.'], view: 'home', currentUser: defaultUsers[0] };
+}
+
+async function saveInventoryToDB(items) {
+  if (!db) await initDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('inventory', 'readwrite');
+    const store = tx.objectStore('inventory');
+    store.clear();
+    items.forEach(item => store.add(item));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 function save() {
   state.view = currentView;
   state.currentUser = currentUser;
-  // Aggressive cleanup to prevent quota exceeded
-  const now_ms = Date.now();
-  // Keep only 30 most recent orders
+  // Keep inventory out of localStorage, it's in IndexedDB now
+  state.inventory = [];
+  // Aggressive cleanup for orders/alerts
   state.orders = state.orders.slice(0, 30);
-  // Keep only 25 alerts
   state.alerts = state.alerts.slice(0, 25);
-  // Keep inventory under 5000 items (most recent first)
-  if (state.inventory?.length > 5000) state.inventory = state.inventory.slice(0, 5000);
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (error) {
     if (error.name === 'QuotaExceededError') {
-      console.warn('Storage quota exceeded, performing aggressive cleanup...');
+      console.warn('Storage quota exceeded, performing cleanup...');
       state.orders = state.orders.slice(0, 5);
       state.alerts = state.alerts.slice(0, 5);
-      state.inventory = state.inventory?.slice(0, 1000) || defaultInventory;
       state.activity = state.activity?.slice(0, 10) || [];
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-        notify('Storage cleared - old data removed to save space');
+        notify('Storage cleared');
       } catch (retry_error) {
         alert('Storage quota exceeded. Please clear browser data and reload.');
       }
@@ -76,7 +114,7 @@ function ensureAdminAccount() { const defaultAdmin = defaultUsers.find((user) =>
 function notify(message) { state.activity.unshift(`${new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })} · ${message}`); state.activity = state.activity.slice(0, 30); save(); }
 function addEvent(order, label) { order.timeline ||= {}; order.timeline[label] = now(); }
 function setView(view) { currentView = view; document.querySelectorAll('.view').forEach((element) => element.classList.toggle('active', element.id === `${view}-view`)); document.querySelectorAll('.nav-tab').forEach((button) => button.classList.toggle('active', button.dataset.view === view)); save(); render(); }
-function itemByUpc(value) { const upc = String(value || '').trim(); return state.inventory.find((item) => String(item.upc) === upc); }
+function itemByUpc(value) { const upc = String(value || '').trim(); return cachedInventory.find((item) => String(item.upc) === upc); }
 function lowStock(item) { return Number(item.on_hand) <= Number(item.safety_stock); }
 function statusClass(status) { return status === 'Fully Fulfilled' ? 'success' : ['Out of Stock', 'Cancelled'].includes(status) ? 'danger' : status === 'Partially Fulfilled' ? 'warning' : ''; }
 
@@ -129,7 +167,7 @@ function renderManager() {
   const complete = state.orders.filter((order) => ['Fully Fulfilled'].includes(order.status));
   $('manager-waiting').textContent = state.orders.filter((order) => order.status === 'Submitted').length;
   $('manager-fulfilled').textContent = complete.length;
-  $('manager-inventory').innerHTML = state.inventory.filter((item) => JSON.stringify(item).toLowerCase().includes(query)).map((item) => `<div class="list-row"><div><strong>${esc(item.description)}</strong><small>UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)}</small></div><span>${item.on_hand} on hand</span></div>`).join('') || '<p class="helper">No matching items.</p>';
+  $('manager-inventory').innerHTML = cachedInventory.filter((item) => JSON.stringify(item).toLowerCase().includes(query)).map((item) => `<div class="list-row"><div><strong>${esc(item.description)}</strong><small>UPC ${esc(item.upc)} · ${esc(item.brand)} · ${esc(item.size)}</small></div><span>${item.on_hand} on hand</span></div>`).join('') || '<p class="helper">No matching items.</p>';
   $('alerts-list').innerHTML = state.alerts.map((alert, index) => `<div class="alert-row"><strong>${esc(alert.description)}</strong><small>UPC ${esc(alert.upc)} · requested ${alert.requested} · fulfilled ${alert.fulfilled}</small><small>${esc(alert.reason)} · ${new Date(alert.createdAt).toLocaleString()}</small><button data-clear-alert="${index}" type="button">Clear</button></div>`).join('') || '<p class="helper">No active alerts.</p>';
   document.querySelectorAll('[data-clear-alert]').forEach((button) => button.addEventListener('click', () => { state.alerts.splice(Number(button.dataset.clearAlert), 1); notify('An alert was cleared'); render(); }));
 }
@@ -154,7 +192,7 @@ function parseCsv(text) { const rows = []; let row = []; let value = ''; let quo
 
 function rowsFromWorksheet(worksheet) { const matrix = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false }); const itemCodeHeaders = ['code', 'upc', 'barcode', 'sku', 'itemnumber', 'itemcode']; const descriptionHeaders = ['desc', 'description', 'productdescription', 'itemdescription', 'name', 'productname']; const headerIndex = matrix.findIndex((row) => row.some((cell) => itemCodeHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, ''))) && row.some((cell) => descriptionHeaders.includes(String(cell).toLowerCase().replace(/[^a-z0-9]/g, '')))); if (headerIndex < 0) return []; const headers = matrix[headerIndex].map((header) => String(header).trim()); return matrix.slice(headerIndex + 1).filter((row) => row.some((cell) => String(cell).trim())).map((row) => headers.reduce((record, header, index) => { record[header] = row[index] ?? ''; return record; }, {})); }
 
-function importInventory(file) { if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } const extension = file.name.split('.').pop().toLowerCase(); if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } const reader = new FileReader(); reader.onload = (event) => { try { let rows; if (extension === 'csv') { rows = parseCsv(event.target.result); } else { if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); } const items = rows.map(normalizeRow).filter(Boolean); if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); state.inventory = [...state.inventory.filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; if (state.inventory.length > 5000) { state.inventory = state.inventory.slice(0, 5000); $('import-status').textContent = `Imported ${Math.min(items.length, 5000)} items (capped at 5000 total).`; } else { $('import-status').textContent = `Imported ${items.length} items from ${file.name}. Total inventory: ${state.inventory.length} items.`; } notify(`${items.length} inventory items imported from ${file.name}`); try { save(); } catch (error) { if (error.name === 'QuotaExceededError') throw new Error('Storage quota exceeded. Try importing fewer items or clear old orders first.'); throw error; } render(); } catch (error) { console.error('Inventory import failed', error); $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; } }; reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; if (extension === 'csv') reader.readAsText(file, 'UTF-8'); else if (extension === 'xls') reader.readAsBinaryString(file); else reader.readAsArrayBuffer(file); }
+function importInventory(file) { if (!file) { $('import-status').textContent = 'Choose an Excel or CSV file first.'; return; } const extension = file.name.split('.').pop().toLowerCase(); if (!['xlsx', 'xls', 'csv'].includes(extension)) { $('import-status').textContent = 'Choose Excel (.xlsx, .xls) or CSV.'; return; } const reader = new FileReader(); reader.onload = async (event) => { try { let rows; if (extension === 'csv') { rows = parseCsv(event.target.result); } else { if (typeof XLSX === 'undefined') throw new Error('Excel parser unavailable'); const workbook = XLSX.read(event.target.result, { type: extension === 'xls' ? 'binary' : 'array', cellText: true, cellNF: false, WTF: false }); rows = workbook.SheetNames.flatMap((name) => rowsFromWorksheet(workbook.Sheets[name])); } const items = rows.map(normalizeRow).filter(Boolean); if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); const newInventory = [...cachedInventory.filter((existing) => !items.some((item) => item.upc === existing.upc)), ...items]; if (newInventory.length > 40000) { cachedInventory = newInventory.slice(0, 40000); $('import-status').textContent = `Imported ${items.length} items (capped at 40000 total).`; } else { cachedInventory = newInventory; $('import-status').textContent = `Imported ${items.length} items. Total inventory: ${cachedInventory.length} items.`; } notify(`${items.length} inventory items imported from ${file.name}`); try { await saveInventoryToDB(cachedInventory); save(); render(); } catch (error) { if (error.name === 'QuotaExceededError') throw new Error('Storage quota exceeded. Try importing fewer items.'); throw error; } } catch (error) { console.error('Inventory import failed', error); $('import-status').textContent = `Import failed: ${error.message || 'Excel could not be read.'}`; } }; reader.onerror = () => { $('import-status').textContent = 'The selected file could not be opened.'; }; if (extension === 'csv') reader.readAsText(file, 'UTF-8'); else if (extension === 'xls') reader.readAsBinaryString(file); else reader.readAsArrayBuffer(file); }
 
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'replenish-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'replenish-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 

@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Replenish | Warehouse app</title>
+    <title>nutmeg Replenish | Warehouse app</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <section id="login-screen" class="login-screen">
       <div class="login-card">
-        <div class="brand"><span class="brand-mark">R</span><div><p class="eyebrow">Warehouse operations</p><h1>Replenish</h1></div></div>
+        <div class="brand"><span class="brand-mark">R</span><div><p class="eyebrow">Warehouse operations</p><h1>nutmeg Replenish</h1></div></div>
         <p class="eyebrow login-label">Secure sign in</p>
         <h2>Welcome</h2>
         <p class="helper">Sign in with your credentials to continue.</p>
@@ -24,7 +24,7 @@
 
     <div class="app-shell">
       <header class="topbar">
-        <div class="brand"><span class="brand-mark">R</span><div><p class="eyebrow">Warehouse operations</p><h1>Replenish</h1></div></div>
+        <div class="brand"><span class="brand-mark">R</span><div><p class="eyebrow">Warehouse operations</p><h1>nutmeg Replenish</h1></div></div>
         <div class="session"><span class="live-dot"></span><strong id="current-user">Signed out</strong><button id="logout-btn" type="button">Sign out</button></div>
       </header>
 
@@ -175,16 +175,39 @@
           <div class="two-column">
             <article class="panel">
               <div class="panel-heading"><h3>User accounts</h3></div>
+              <div class="role-guide" style="background:#f5f5f5; padding:12px; border-radius:4px; margin-bottom:16px; font-size:13px;">
+                <strong>Role permissions:</strong>
+                <ul style="margin:8px 0; padding-left:20px;">
+                  <li><strong>Employee:</strong> Scan shelf labels, create refill orders</li>
+                  <li><strong>Warehouse:</strong> Pick orders, accept deliveries</li>
+                  <li><strong>Manager:</strong> View orders, monitor inventory, manage alerts</li>
+                  <li><strong>Admin:</strong> All access + user management</li>
+                </ul>
+              </div>
               <form id="user-form" class="form-grid">
                 <input id="user-name" placeholder="Username" required />
                 <input id="user-password" type="password" placeholder="Password" required />
-                <input id="user-aisle" placeholder="Aisle/Zone" required />
                 <select id="user-role" required>
-                  <option value="">Role</option>
+                  <option value="">Select role</option>
                   <option value="employee">Employee (scan)</option>
                   <option value="warehouse">Warehouse (pick)</option>
                   <option value="manager">Manager (track)</option>
-                  <option value="admin">Admin</option>
+                  <option value="admin">Admin (all)</option>
+                </select>
+                <select id="user-aisle" required>
+                  <option value="">Select aisle</option>
+                  <option value="Aisle 1">Aisle 1</option>
+                  <option value="Aisle 2">Aisle 2</option>
+                  <option value="Aisle 3">Aisle 3</option>
+                  <option value="Aisle 4">Aisle 4</option>
+                  <option value="Aisle 5">Aisle 5</option>
+                  <option value="Aisle 6">Aisle 6</option>
+                  <option value="Aisle 7">Aisle 7</option>
+                  <option value="Aisle 8">Aisle 8</option>
+                  <option value="Aisle 9">Aisle 9</option>
+                  <option value="Aisle 10">Aisle 10</option>
+                  <option value="All aisles">All aisles</option>
+                  <option value="Receiving">Receiving</option>
                 </select>
                 <button class="primary" type="submit">Add account</button>
               </form>
@@ -216,6 +239,45 @@
         </div>
         <video id="camera-video" autoplay playsinline></video>
         <p id="camera-status" class="helper">Scanning...</p>
+      </div>
+    </div>
+
+    <div id="edit-user-modal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-heading">
+          <h2>Edit user account</h2>
+          <button id="close-edit-user-btn" type="button">Close</button>
+        </div>
+        <form id="edit-user-form" class="form-grid">
+          <input id="edit-user-name" placeholder="Username" required />
+          <input id="edit-user-password" type="password" placeholder="Password" required />
+          <select id="edit-user-role" required>
+            <option value="">Select role</option>
+            <option value="employee">Employee (scan)</option>
+            <option value="warehouse">Warehouse (pick)</option>
+            <option value="manager">Manager (track)</option>
+            <option value="admin">Admin (all)</option>
+          </select>
+          <select id="edit-user-aisle" required>
+            <option value="">Select aisle</option>
+            <option value="Aisle 1">Aisle 1</option>
+            <option value="Aisle 2">Aisle 2</option>
+            <option value="Aisle 3">Aisle 3</option>
+            <option value="Aisle 4">Aisle 4</option>
+            <option value="Aisle 5">Aisle 5</option>
+            <option value="Aisle 6">Aisle 6</option>
+            <option value="Aisle 7">Aisle 7</option>
+            <option value="Aisle 8">Aisle 8</option>
+            <option value="Aisle 9">Aisle 9</option>
+            <option value="Aisle 10">Aisle 10</option>
+            <option value="All aisles">All aisles</option>
+            <option value="Receiving">Receiving</option>
+          </select>
+          <div class="button-row">
+            <button class="primary" type="submit">Save changes</button>
+            <button id="close-edit-user-submit" type="button">Cancel</button>
+          </div>
+        </form>
       </div>
     </div>
 
