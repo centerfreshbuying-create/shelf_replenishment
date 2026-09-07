@@ -223,6 +223,19 @@
               </div>
               <p id="import-status" class="helper">No file imported yet.</p>
             </article>
+            <article class="panel">
+              <div class="panel-heading"><h3>Backup & Restore</h3></div>
+              <p class="helper">Export all data to share across devices, or restore from a backup file</p>
+              <div class="button-row">
+                <button id="export-data-btn" class="primary" type="button">Export backup</button>
+              </div>
+              <p class="helper" style="margin:12px 0 0 0;">Restore from backup:</p>
+              <input id="backup-upload" type="file" accept=".json" />
+              <div class="button-row">
+                <button id="import-data-btn" type="button">Restore backup</button>
+              </div>
+              <p id="backup-status" class="helper"></p>
+            </article>
           </div>
         </section>
       </main>

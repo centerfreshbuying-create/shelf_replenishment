@@ -341,6 +341,49 @@ function importInventory(file) {
 
 function downloadTemplate() { const headers = ['Code', 'Desc', 'Brand', 'Size']; const example = ['000000000000', 'Example item', 'Example brand', 'Example size']; if (typeof XLSX === 'undefined') { const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([`${headers.join(',')}\n${example.join(',')}\n`], { type: 'text/csv' })); link.download = 'replenish-item-template.csv'; document.body.appendChild(link); link.click(); link.remove(); $('import-status').textContent = 'CSV template downloaded.'; return; } const sheet = XLSX.utils.aoa_to_sheet([headers, example]); const workbook = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(workbook, sheet, 'Items'); XLSX.writeFile(workbook, 'replenish-item-template.xlsx'); $('import-status').textContent = 'Excel template downloaded.'; }
 
+function exportAppData() {
+  const exportData = {
+    timestamp: new Date().toISOString(),
+    inventory: cachedInventory,
+    state: { users: state.users, orders: state.orders, alerts: state.alerts, activity: state.activity }
+  };
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }));
+  link.download = `replenish-backup-${new Date().getTime()}.json`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  notify('App data exported');
+}
+
+function importAppData(file) {
+  if (!file) { alert('Choose a backup file first.'); return; }
+  const reader = new FileReader();
+  reader.onload = (event) => {
+    try {
+      const importedData = JSON.parse(event.target.result);
+      if (!importedData.inventory || !importedData.state) throw new Error('Invalid backup file format');
+      cachedInventory = importedData.inventory;
+      rebuildInventoryIndex();
+      state.users = importedData.state.users || state.users;
+      state.orders = importedData.state.orders || [];
+      state.alerts = importedData.state.alerts || [];
+      state.activity = importedData.state.activity || [];
+      saveInventoryToDB(cachedInventory);
+      save();
+      render();
+      alert(`Restored ${cachedInventory.length} items and ${state.orders.length} orders from backup.`);
+      notify('App data restored from backup');
+    } catch (error) {
+      alert(`Import failed: ${error.message}`);
+      console.error('Backup import error:', error);
+    }
+  };
+  reader.onerror = () => alert('Could not read the backup file.');
+  reader.readAsText(file, 'UTF-8');
+}
+
+
 document.querySelectorAll('[data-view]').forEach((element) => element.addEventListener('click', () => setView(element.dataset.view)));
 function login() { ensureAdminAccount(); const username = $('login-username').value.trim().toLowerCase(); const password = $('login-password').value; const user = state.users.find((entry) => entry && String(entry.name).trim().toLowerCase() === username && String(entry.password) === password); if (!user) { $('login-status').textContent = 'Username or password is incorrect.'; return; } currentUser = user; currentView = 'home'; save(); showAuthenticatedApp(); $('login-status').textContent = ''; try { render(); } catch (error) { console.error('Unable to render signed-in app', error); $('login-status').textContent = 'Signed in, but the dashboard could not load. Refresh the page.'; } }
 
@@ -362,6 +405,9 @@ $('manager-search').addEventListener('input', renderManager);
 $('inventory-upload').addEventListener('change', (event) => importInventory(event.target.files[0]));
 $('import-inventory-btn').addEventListener('click', () => importInventory($('inventory-upload').files[0]));
 $('download-template-btn').addEventListener('click', downloadTemplate);
+$('export-data-btn').addEventListener('click', exportAppData);
+$('backup-upload').addEventListener('change', (event) => importAppData(event.target.files[0]));
+$('import-data-btn').addEventListener('click', () => importAppData($('backup-upload').files[0]));
 $('user-form').addEventListener('submit', (event) => { event.preventDefault(); const name = $('user-name').value.trim(); const password = $('user-password').value; const role = $('user-role').value; const aisle = $('user-aisle').value.trim(); if (!name || !password || !role || !aisle) return; state.users.push({ name, password, role, aisle }); event.target.reset(); notify(`${name} account added`); render(); });
 
 initializeApp().then(() => render()).catch((error) => {
