@@ -309,7 +309,7 @@ function importInventory(file) {
       } 
       const items = rows.map(normalizeRow).filter(Boolean); 
       if (!items.length) throw new Error('No item rows found. Each item needs a description and code.'); 
-      const newItems = items.filter((item) => !cachedInventory.some((existing) => existing.upc === item.upc)); 
+      const newItems = items.filter((item) => !cachedInventory.some((existing) => normalizeUpc(existing.upc) === normalizeUpc(item.upc))); 
       const newInventory = [...cachedInventory, ...newItems]; 
       if (newInventory.length > 40000) { 
         cachedInventory = newInventory.slice(0, 40000); 
